@@ -100,6 +100,28 @@ router.post('/register', async (req, res) => {
     }
 });
 
+router.get('/search', async (req, res) => {
+    const { keyword } = req.query;
+    if (!keyword || typeof keyword !== 'string') {
+        return res.status(400).json({ message: 'Invalid keyword' });
+    }
+
+    try {
+        const regex = new RegExp(keyword, 'i');
+        const users = await User.find({
+            $or: [
+                { username: regex },
+                { avatarname: regex }
+            ]
+        }).select('username avatarname avatarimg');
+
+        res.json({ users });
+    } catch (err) {
+        console.error('User search error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 router.get("/:username", async (req, res) => {
     try {
         const { username } = req.params;
@@ -126,6 +148,7 @@ router.get("/:username", async (req, res) => {
         console.error('Error fetching user data:', err);
         res.status(500).json({ message: 'Server error' });
     }
-})
+});
+
 
 export default router;

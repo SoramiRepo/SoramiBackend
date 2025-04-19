@@ -4,6 +4,24 @@ import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 
+// 递归获取所有层级的回复
+async function getAllReplies(postId) {
+    const directReplies = await Post.find({ parent: postId })
+        .sort({ createdAt: 1 })
+        .populate('author', 'username avatarname avatarimg');
+
+    const allReplies = [...directReplies];
+
+    // 遍历每个直接回复，递归获取子回复
+    for (const reply of directReplies) {
+        const subReplies = await getAllReplies(reply._id); // 递归获取子回复
+        allReplies.push(...subReplies); // 将子回复添加到所有回复中
+    }
+
+    return allReplies;
+}
+
+
 const router = express.Router();
 
 // Secure way to get the token
@@ -181,7 +199,6 @@ router.get('/fetch', async (req, res) => {
     }
 });
 
-// Get details of a single post
 router.get('/:id', async (req, res) => {
     const postId = req.params.id;
 
@@ -189,11 +206,15 @@ router.get('/:id', async (req, res) => {
         const post = await Post.findById(postId).populate('author', 'username avatarname avatarimg');
         if (!post) return res.status(404).json({ message: 'Post does not exist' });
 
-        res.json({ post });
+        // 获取所有层级的回复
+        const replies = await getAllReplies(postId);
+
+        res.json({ post, replies });
     } catch (err) {
         console.error('Fetch Single Post Error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 });
+
 
 export default router;
