@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
     avatarimg: { type: String, default: '' },
     bio: { type: String, default: '' },
     registertime: { type: Date, default: Date.now },
+    followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 });
 
 const User = mongoose.model('User', userSchema);
