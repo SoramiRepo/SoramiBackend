@@ -8,7 +8,7 @@ import mongoose from 'mongoose';
 async function getAllReplies(postId) {
     const directReplies = await Post.find({ parent: postId })
         .sort({ createdAt: 1 })
-        .populate('author', 'username avatarname avatarimg');
+        .populate('author', 'username avatarname avatarimg badges');
 
     const allReplies = [...directReplies];
 
@@ -47,7 +47,7 @@ router.post('/create', async (req, res) => {
         const newPost = new Post({ content, author: userId });
         await newPost.save();
 
-        const populatedPost = await newPost.populate('author', 'username avatarname avatarimg');
+        const populatedPost = await newPost.populate('author', 'username avatarname avatarimg badges');
 
         res.json({ message: 'Post created successfully', post: populatedPost });
 
@@ -62,7 +62,7 @@ router.get('/all', async (req, res) => {
     try {
         const posts = await Post.find()
             .sort({ createdAt: -1 })
-            .populate('author', 'username avatarname avatarimg');
+            .populate('author', 'username avatarname avatarimg badges');
 
         res.json({ posts });
     } catch (err) {
@@ -123,7 +123,7 @@ router.post('/reply/:parentId', async (req, res) => {
         });
 
         await replyPost.save();
-        const populatedReply = await replyPost.populate('author', 'username avatarname avatarimg');
+        const populatedReply = await replyPost.populate('author', 'username avatarname avatarimg badges');
 
         res.json({ message: 'Reply successful', reply: populatedReply });
 
@@ -140,7 +140,7 @@ router.get('/:id/replies', async (req, res) => {
     try {
         const replies = await Post.find({ parent: postId })
             .sort({ createdAt: 1 })
-            .populate('author', 'username avatarname avatarimg');
+            .populate('author', 'username avatarname avatarimg badges');
 
         res.json({ replies });
     } catch (err) {
@@ -156,7 +156,6 @@ router.get('/fetch', async (req, res) => {
         // Initialize query conditions
         const query = {};
 
-        // ✅ Verify if the userId is a valid ObjectId (to prevent errors)
         if (userId) {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
                 return res.status(400).json({ message: 'Invalid userId' });
@@ -164,26 +163,24 @@ router.get('/fetch', async (req, res) => {
             query.author = userId;
         }
 
-        // ✅ Handle keyword search (case insensitive)
         if (keyword && typeof keyword === 'string') {
             query.content = { $regex: keyword, $options: 'i' };
         }
 
-        // ✅ Safely handle limit (to avoid NaN)
         const parsedLimit = Math.max(1, parseInt(limit) || 20);
 
         // Query main posts
         const posts = await Post.find(query)
             .sort({ createdAt: -1 })
             .limit(parsedLimit)
-            .populate('author', 'username avatarname avatarimg');
+            .populate('author', 'username avatarname avatarimg badges');
 
         // Handle nested replies
         const postsWithReplies = await Promise.all(
             posts.map(async (post) => {
                 const replies = await Post.find({ parent: post._id })
                     .sort({ createdAt: 1 })
-                    .populate('author', 'username avatarname avatarimg');
+                    .populate('author', 'username avatarname avatarimg badges');
 
                 return {
                     ...post.toObject(),
@@ -203,7 +200,7 @@ router.get('/:id', async (req, res) => {
     const postId = req.params.id;
 
     try {
-        const post = await Post.findById(postId).populate('author', 'username avatarname avatarimg');
+        const post = await Post.findById(postId).populate('author', 'username avatarname avatarimg badges');
         if (!post) return res.status(404).json({ message: 'Post does not exist' });
 
         // 获取所有层级的回复

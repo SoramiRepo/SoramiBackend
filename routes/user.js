@@ -116,39 +116,33 @@ router.get('/search', async (req, res) => {
     }
 });
 
-// 获取用户信息，包括关注数和关注列表
-router.get('/:username', async (req, res) => {
-    const { username } = req.params;
+// 用户编辑Profile
+router.put('/edit-profile', async (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];  // 获取 Bearer token
+    if (!token) return res.status(401).json({ message: 'Not logged in' });
+
     try {
-        const user = await User.findOne({ username }).populate('followers', 'username avatarname avatarimg badges').populate('following', 'username avatarname avatarimg badges');
-        if (!user)
-            return res.status(404).json({ message: '用户不存在' });
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const userId = decoded.userId;
 
-        res.json({
-            user: {
-                _id: user._id,
-                username: user.username,
-                avatarname: user.avatarname,
-                avatarimg: user.avatarimg,
-                bio: user.bio,
-                registertime: user.registertime,
-                followersCount: user.followers.length,
-                followingCount: user.following.length, 
-                followers: user.followers, 
-                following: user.following,
-                badges: user.badges,
+        const { avatarname, avatarimg } = req.body;
 
-                // 判断是否互相关注
-                followerIds: user.followers.map(f => f._id.toString()),
-                followingIds: user.following.map(f => f._id.toString()),
-            }
-        });
+        // 查找用户并更新头像和用户名
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        // 仅更新传入的字段
+        if (avatarname) user.avatarname = avatarname;
+        if (avatarimg) user.avatarimg = avatarimg;
+
+        await user.save();
+
+        res.json({ message: 'Profile updated successfully' });
     } catch (err) {
-        console.error('获取用户信息错误:', err);
-        res.status(500).json({ message: '服务器错误' });
+        console.error('Error updating profile:', err);
+        res.status(500).json({ message: 'Server error' });
     }
 });
-
 
 // 关注
 router.post('/follow/:targetId', authMiddleware, async (req, res) => {
@@ -217,6 +211,41 @@ router.post('/unfollow/:targetId', authMiddleware, async (req, res) => {
         res.json({ message: '取消关注成功' });
     } catch (err) {
         console.error('取消关注错误:', err);
+        res.status(500).json({ message: '服务器错误' });
+    }
+});
+
+// ⚠ 下面的所有代码都应当放到最下面
+
+// 获取用户信息，包括关注数和关注列表
+router.get('/:username', async (req, res) => {
+    const { username } = req.params;
+    try {
+        const user = await User.findOne({ username }).populate('followers', 'username avatarname avatarimg badges').populate('following', 'username avatarname avatarimg badges');
+        if (!user)
+            return res.status(404).json({ message: '用户不存在' });
+
+        res.json({
+            user: {
+                _id: user._id,
+                username: user.username,
+                avatarname: user.avatarname,
+                avatarimg: user.avatarimg,
+                bio: user.bio,
+                registertime: user.registertime,
+                followersCount: user.followers.length,
+                followingCount: user.following.length, 
+                followers: user.followers, 
+                following: user.following,
+                badges: user.badges,
+
+                // 判断是否互相关注
+                followerIds: user.followers.map(f => f._id.toString()),
+                followingIds: user.following.map(f => f._id.toString()),
+            }
+        });
+    } catch (err) {
+        console.error('获取用户信息错误:', err);
         res.status(500).json({ message: '服务器错误' });
     }
 });
