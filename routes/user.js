@@ -107,7 +107,7 @@ router.get('/search', async (req, res) => {
                 { username: regex },
                 { avatarname: regex }
             ]
-        }).select('username avatarname avatarimg');
+        }).select('username avatarname avatarimg badges followers following');
 
         res.json({ users });
     } catch (err) {
@@ -116,12 +116,11 @@ router.get('/search', async (req, res) => {
     }
 });
 
-// 获取用户信息
 // 获取用户信息，包括关注数和关注列表
 router.get('/:username', async (req, res) => {
     const { username } = req.params;
     try {
-        const user = await User.findOne({ username }).populate('followers', 'username avatarname avatarimg').populate('following', 'username avatarname avatarimg');
+        const user = await User.findOne({ username }).populate('followers', 'username avatarname avatarimg badges').populate('following', 'username avatarname avatarimg badges');
         if (!user)
             return res.status(404).json({ message: '用户不存在' });
 
@@ -136,7 +135,12 @@ router.get('/:username', async (req, res) => {
                 followersCount: user.followers.length,
                 followingCount: user.following.length, 
                 followers: user.followers, 
-                following: user.following  
+                following: user.following,
+                badges: user.badges,
+
+                // 判断是否互相关注
+                followerIds: user.followers.map(f => f._id.toString()),
+                followingIds: user.following.map(f => f._id.toString()),
             }
         });
     } catch (err) {

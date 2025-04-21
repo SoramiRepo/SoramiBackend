@@ -9,6 +9,11 @@ const userSchema = new mongoose.Schema({
     registertime: { type: Date, default: Date.now },
     followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    badges: {
+        type: [String],
+        enum: ['verified', 'soramidev'],
+        default: [],
+    },
 });
 
 const User = mongoose.model('User', userSchema);
