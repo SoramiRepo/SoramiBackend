@@ -3,6 +3,7 @@ import cors from 'cors';
 import connectDB from './utils/db.js';
 import userRoutes from './routes/user.js';
 import postRoutes from './routes/post.js';
+import notificationRoutes from './routes/notification.js';
 
 const app = express();
 
@@ -13,6 +14,7 @@ connectDB();
 
 app.use('/api/user', userRoutes);
 app.use('/api/post', postRoutes);
+app.use('/api/notification', notificationRoutes);
 
 app.use((req, res, next) => {
     console.log("Fallback 404 route hit:", req.path);
