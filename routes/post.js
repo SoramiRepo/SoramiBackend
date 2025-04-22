@@ -243,7 +243,13 @@ router.get('/:id', async (req, res) => {
     try {
         const post = await Post.findById(req.params.id)
             .populate('author', 'username avatarname avatarimg badges')
-            .populate('repost')
+            .populate({
+                path: 'repost',
+                populate: {
+                    path: 'author',
+                    select: 'username avatarname avatarimg badges',
+                }
+            })
 
         if (!post) return res.status(404).json({ message: 'Post does not exist' });
 
