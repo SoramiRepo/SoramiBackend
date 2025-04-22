@@ -43,33 +43,35 @@ router.get('/me', authMiddleware, async (req, res) => {
     }
 });
 
-// 将某条通知标记为已读
-router.post('/read/:id', authMiddleware, async (req, res) => {
+// 获取未读通知数量
+router.get('/unread-count', authMiddleware, async (req, res) => {
     try {
-        const notification = await Notification.findOneAndUpdate(
-            { _id: req.params.id, to: req.userId },
-            { isRead: true },
-            { new: true }
-        );
-
-        if (!notification) {
-            return res.status(404).json({ message: '通知不存在或无权限' });
-        }
-
-        res.json({ notification });
+        const count = await Notification.countDocuments({ to: req.userId, isRead: false });
+        res.json({ count });
     } catch (err) {
-        console.error('标记通知失败:', err);
+        res.status(500).json({ message: '服务器错误' });
+    }
+});
+
+// 将某条通知标记为已读
+router.patch('/read/:id', authMiddleware, async (req, res) => {
+    try {
+        await Notification.findByIdAndUpdate(req.params.id, { isRead: true });
+        res.json({ message: '已标记为已读' });
+    } catch (err) {
         res.status(500).json({ message: '服务器错误' });
     }
 });
 
 // 标记全部通知为已读
-router.post('/read-all', authMiddleware, async (req, res) => {
+router.patch('/mark-all-read', authMiddleware, async (req, res) => {
     try {
-        await Notification.updateMany({ to: req.userId, isRead: false }, { isRead: true });
-        res.json({ message: '全部通知已标记为已读' });
+        await Notification.updateMany(
+            { to: req.userId, isRead: false },
+            { $set: { isRead: true } }
+        );
+        res.json({ message: '全部标记为已读' });
     } catch (err) {
-        console.error('标记全部通知失败:', err);
         res.status(500).json({ message: '服务器错误' });
     }
 });
