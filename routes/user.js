@@ -53,6 +53,12 @@ router.post('/login', async (req, res) => {
 
 // 注册
 router.post('/register', async (req, res) => {
+    const isAllowed = false; // 设置是否允许注册
+
+    if (!isAllowed) {
+        return res.status(400).json({ message: '当前不可注册' });
+    }
+
     const { username, password, avatarname, avatarimg, bio } = req.body;
     if (!username || !password)
         return res.status(400).json({ message: '用户名和密码不能为空' });
@@ -93,6 +99,7 @@ router.post('/register', async (req, res) => {
         res.status(500).json({ message: '服务器错误' });
     }
 });
+
 
 // 搜索用户
 router.get('/search', async (req, res) => {
