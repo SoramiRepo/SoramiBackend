@@ -53,7 +53,7 @@ router.post('/login', async (req, res) => {
 
 // 注册
 router.post('/register', async (req, res) => {
-    const isAllowed = false; // 设置是否允许注册
+    const isAllowed = true; // 设置是否允许注册
 
     if (!isAllowed) {
         return res.status(400).json({ message: '当前不可注册' });
