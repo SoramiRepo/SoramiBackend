@@ -100,6 +100,32 @@ router.post('/register', async (req, res) => {
     }
 });
 
+// 临时重置密码功能 (不安全 - 仅用于临时场景)
+router.post('/temporary-reset-password', async (req, res) => {
+    const { username, newPassword } = req.body;
+
+    if (!username || !newPassword) {
+        return res.status(400).json({ message: '用户名和新密码不能为空' });
+    }
+
+    try {
+        const user = await User.findOne({ username });
+        if (!user) {
+            return res.status(404).json({ message: '用户不存在' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        user.password = hashedPassword;
+        await user.save();
+
+        res.json({ message: `用户 ${username} 的密码已成功重置` });
+
+    } catch (error) {
+        console.error('临时重置密码错误:', error);
+        res.status(500).json({ message: '服务器错误' });
+    }
+});
+
 
 // 搜索用户
 router.get('/search', async (req, res) => {
