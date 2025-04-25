@@ -6,35 +6,52 @@ import authMiddleware from '../middleware/authMiddleware.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
+const DEBUG = process.env.DEBUG || false;
+
 const router = express.Router();
 
-// 工具函数：根据 ID 查找用户
+// Tool function: look up user by ID
 const findUserById = async (id) => await User.findById(id);
 
-// 工具函数：生成 Token
+// Tool function: generate JWT token
 const generateToken = (user) =>
+
     jwt.sign(
         { userId: user._id, username: user.username },
         process.env.JWT_SECRET,
         { expiresIn: '7d' }
     );
 
-// 登录
 router.post('/login', async (req, res) => {
     const { username, password } = req.body;
-    if (!username || !password)
-        return res.status(400).json({ message: '用户名和密码不能为空' });
+
+    if (typeof username !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ message: 'Username and password are required.' });
+    }
 
     try {
         const user = await User.findOne({ username });
-        if (!user) return res.status(401).json({ message: '用户名不存在' });
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid username or password.' });
+        }
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(401).json({ message: '密码错误' });
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Invalid username or password.' });
+        }
 
         const token = generateToken(user);
+
+        if (DEBUG) {
+            console.log('Login successful:', {
+                userId: user._id,
+                username: user.username,
+                token,
+            });
+        }
+
         res.json({
-            message: '登录成功',
+            message: 'Login successful.',
             token,
             user: {
                 id: user._id,
@@ -45,28 +62,30 @@ router.post('/login', async (req, res) => {
                 registertime: user.registertime,
             },
         });
-    } catch (err) {
-        console.error('Login Error:', err);
-        res.status(500).json({ message: '服务器错误' });
+    } catch (error) {
+        console.error('Login Error:', error);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
-// 注册
 router.post('/register', async (req, res) => {
-    const isAllowed = true; // 设置是否允许注册
+    const isAllowed = process.env.ALLOW_REGISTER === 'true';
 
     if (!isAllowed) {
-        return res.status(400).json({ message: '当前不可注册' });
+        return res.status(403).json({ message: 'Registration is currently disabled.' });
     }
 
     const { username, password, avatarname, avatarimg, bio } = req.body;
-    if (!username || !password)
-        return res.status(400).json({ message: '用户名和密码不能为空' });
+
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
+        return res.status(400).json({ message: 'Username and password are required.' });
+    }
 
     try {
         const existingUser = await User.findOne({ username });
-        if (existingUser)
-            return res.status(400).json({ message: '用户名已存在' });
+        if (existingUser) {
+            return res.status(409).json({ message: 'Username already exists.' });
+        }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -83,7 +102,7 @@ router.post('/register', async (req, res) => {
         const token = generateToken(newUser);
 
         res.status(201).json({
-            message: '注册成功',
+            message: 'Registration successful.',
             token,
             user: {
                 id: newUser._id,
@@ -94,47 +113,23 @@ router.post('/register', async (req, res) => {
                 registertime: newUser.registertime,
             },
         });
-    } catch (err) {
-        console.error('Register Error:', err);
-        res.status(500).json({ message: '服务器错误' });
-    }
-});
-
-// 临时重置密码功能 (不安全 - 仅用于临时场景)
-router.post('/temporary-reset-password', async (req, res) => {
-    const { username, newPassword } = req.body;
-
-    if (!username || !newPassword) {
-        return res.status(400).json({ message: '用户名和新密码不能为空' });
-    }
-
-    try {
-        const user = await User.findOne({ username });
-        if (!user) {
-            return res.status(404).json({ message: '用户不存在' });
-        }
-
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        user.password = hashedPassword;
-        await user.save();
-
-        res.json({ message: `用户 ${username} 的密码已成功重置` });
-
     } catch (error) {
-        console.error('临时重置密码错误:', error);
-        res.status(500).json({ message: '服务器错误' });
+        console.error('Register Error:', error);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
 
-// 搜索用户
 router.get('/search', async (req, res) => {
     const { keyword } = req.query;
-    if (!keyword || typeof keyword !== 'string')
-        return res.status(400).json({ message: '无效关键词' });
+
+    if (typeof keyword !== 'string' || !keyword.trim()) {
+        return res.status(400).json({ message: 'Invalid search keyword.' });
+    }
 
     try {
-        const regex = new RegExp(keyword, 'i');
+        const regex = new RegExp(keyword.trim(), 'i');
+
         const users = await User.find({
             $or: [
                 { username: regex },
@@ -143,120 +138,129 @@ router.get('/search', async (req, res) => {
         }).select('username avatarname avatarimg badges followers following');
 
         res.json({ users });
-    } catch (err) {
-        console.error('搜索用户错误:', err);
-        res.status(500).json({ message: '服务器错误' });
+    } catch (error) {
+        console.error('User search error:', error);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
-// 用户编辑Profile
-router.put('/edit-profile', async (req, res) => {
-    const token = req.headers.authorization?.split(' ')[1];  // 获取 Bearer token
-    if (!token) return res.status(401).json({ message: 'Not logged in' });
-
+router.put('/edit-profile', authMiddleware, async (req, res) => {
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const userId = decoded.userId;
-
         const { avatarname, avatarimg } = req.body;
 
-        // 查找用户并更新头像和用户名
-        const user = await User.findById(userId);
-        if (!user) return res.status(404).json({ message: 'User not found' });
+        if (!avatarname && !avatarimg) {
+            return res.status(400).json({ message: 'No data to update.' });
+        }
 
-        // 仅更新传入的字段
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
         if (avatarname) user.avatarname = avatarname;
         if (avatarimg) user.avatarimg = avatarimg;
 
         await user.save();
 
-        res.json({ message: 'Profile updated successfully' });
-    } catch (err) {
-        console.error('Error updating profile:', err);
-        res.status(500).json({ message: 'Server error' });
+        res.json({ message: 'Profile updated successfully.' });
+    } catch (error) {
+        console.error('Profile update error:', error);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
-// 关注
 router.post('/follow/:targetId', authMiddleware, async (req, res) => {
     const { userId } = req;
     const { targetId } = req.params;
 
     if (userId === targetId) {
-        return res.status(400).json({ message: '不能关注自己' });
+        return res.status(400).json({ message: 'You cannot follow yourself.' });
     }
 
     try {
-        const user = await User.findById(userId);
-        const target = await User.findById(targetId);
+        const [user, target] = await Promise.all([
+            User.findById(userId),
+            User.findById(targetId)
+        ]);
 
         if (!user || !target) {
-            return res.status(404).json({ message: '用户未找到' });
+            return res.status(404).json({ message: 'User not found.' });
         }
 
-        // 判断是否已关注
-        const alreadyFollowing = user.following.some(id => id.toString() === targetId);
+        const alreadyFollowing = user.following.includes(target._id);
         if (alreadyFollowing) {
-            return res.status(400).json({ message: '已关注该用户' });
+            return res.status(400).json({ message: 'You are already following this user.' });
         }
 
-        // 更新数据库：添加关注
-        await User.findByIdAndUpdate(userId, {
-            $addToSet: { following: target._id }
-        });
+        await Promise.all([
+            User.findByIdAndUpdate(userId, {
+                $addToSet: { following: target._id }
+            }),
+            User.findByIdAndUpdate(targetId, {
+                $addToSet: { followers: user._id }
+            })
+        ]);
 
-        await User.findByIdAndUpdate(targetId, {
-            $addToSet: { followers: user._id }
-        });
-
-        console.log('User following:', user.following);
-        console.log('Target followers:', target.followers);
-
-        res.json({ message: '关注成功' });
-    } catch (err) {
-        console.error('关注失败:', err);
-        res.status(500).json({ message: '服务器错误' });
+        res.json({ message: 'Followed successfully.' });
+    } catch (error) {
+        console.error('Follow error:', error);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
-
-// 取消关注
 router.post('/unfollow/:targetId', authMiddleware, async (req, res) => {
     const { userId } = req;
     const { targetId } = req.params;
 
+    if (userId === targetId) {
+        return res.status(400).json({ message: 'You cannot unfollow yourself.' });
+    }
+
     try {
-        const user = await findUserById(userId);
-        const target = await findUserById(targetId);
+        const [user, target] = await Promise.all([
+            User.findById(userId),
+            User.findById(targetId)
+        ]);
 
-        if (!user || !target)
-            return res.status(404).json({ message: '用户未找到' });
+        if (!user || !target) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
 
-        user.following = user.following.filter(id => id.toString() !== targetId);
-        target.followers = target.followers.filter(id => id.toString() !== userId);
+        const isFollowing = user.following.includes(target._id);
+        if (!isFollowing) {
+            return res.status(400).json({ message: 'You are not following this user.' });
+        }
 
-        await user.save();
-        await target.save();
+        await Promise.all([
+            User.findByIdAndUpdate(userId, {
+                $pull: { following: target._id }
+            }),
+            User.findByIdAndUpdate(targetId, {
+                $pull: { followers: user._id }
+            })
+        ]);
 
-        console.log('User following:', user.following);
-        console.log('Target followers:', target.followers);
-
-        res.json({ message: '取消关注成功' });
-    } catch (err) {
-        console.error('取消关注错误:', err);
-        res.status(500).json({ message: '服务器错误' });
+        res.json({ message: 'Unfollowed successfully.' });
+    } catch (error) {
+        console.error('Unfollow error:', error);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
-// ⚠ 下面的所有代码都应当放到最下面
-
-// 获取用户信息，包括关注数和关注列表
 router.get('/:username', async (req, res) => {
     const { username } = req.params;
+
     try {
-        const user = await User.findOne({ username }).populate('followers', 'username avatarname avatarimg badges').populate('following', 'username avatarname avatarimg badges');
-        if (!user)
-            return res.status(404).json({ message: '用户不存在' });
+        const user = await User.findOne({ username })
+            .populate('followers', 'username avatarname avatarimg badges')
+            .populate('following', 'username avatarname avatarimg badges');
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        const followers = user.followers || [];
+        const following = user.following || [];
 
         res.json({
             user: {
@@ -266,21 +270,20 @@ router.get('/:username', async (req, res) => {
                 avatarimg: user.avatarimg,
                 bio: user.bio,
                 registertime: user.registertime,
-                followersCount: user.followers.length,
-                followingCount: user.following.length, 
-                followers: user.followers, 
-                following: user.following,
                 badges: user.badges,
-
-                // 判断是否互相关注
-                followerIds: user.followers.map(f => f._id.toString()),
-                followingIds: user.following.map(f => f._id.toString()),
+                followersCount: followers.length,
+                followingCount: following.length,
+                followers,
+                following,
+                followerIds: followers.map(f => f._id.toString()),
+                followingIds: following.map(f => f._id.toString())
             }
         });
-    } catch (err) {
-        console.error('获取用户信息错误:', err);
-        res.status(500).json({ message: '服务器错误' });
+    } catch (error) {
+        console.error('Error fetching user profile:', error);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
+
 
 export default router;

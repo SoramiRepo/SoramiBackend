@@ -4,31 +4,28 @@ import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// 创建通知
 router.post('/create', authMiddleware, async (req, res) => {
     const { type, to, post, message } = req.body;
 
     if (!type || !to) {
-        return res.status(400).json({ message: '缺少必要字段 type 或 to' });
+        return res.status(400).json({ success: false, message: 'Missing required fields: type or to' });
     }
 
     try {
-        const notification = new Notification({
+        const notification = await Notification.create({
             type,
             from: req.userId,
             to,
             post,
             message,
         });
-        await notification.save();
-        res.status(201).json({ notification });
+        res.status(201).json({ success: true, notification });
     } catch (err) {
-        console.error('创建通知失败:', err);
-        res.status(500).json({ message: '服务器错误' });
+        console.error('Failed to create notification:', err);
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 });
 
-// 获取当前用户的所有通知
 router.get('/me', authMiddleware, async (req, res) => {
     try {
         const notifications = await Notification.find({ to: req.userId })
@@ -36,43 +33,47 @@ router.get('/me', authMiddleware, async (req, res) => {
             .populate('from', 'username avatarname avatarimg')
             .populate('post', 'content');
 
-        res.json({ notifications });
+        res.json({ success: true, notifications });
     } catch (err) {
-        console.error('获取通知失败:', err);
-        res.status(500).json({ message: '服务器错误' });
+        console.error('Failed to fetch notifications:', err);
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 });
 
-// 获取未读通知数量
 router.get('/unread-count', authMiddleware, async (req, res) => {
     try {
         const count = await Notification.countDocuments({ to: req.userId, isRead: false });
-        res.json({ count });
+        res.json({ success: true, count });
     } catch (err) {
-        res.status(500).json({ message: '服务器错误' });
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 });
 
-// 将某条通知标记为已读
 router.patch('/read/:id', authMiddleware, async (req, res) => {
     try {
-        await Notification.findByIdAndUpdate(req.params.id, { isRead: true });
-        res.json({ message: '已标记为已读' });
+        const notification = await Notification.findOneAndUpdate(
+            { _id: req.params.id, to: req.userId },
+            { isRead: true },
+            { new: true }
+        );
+        if (!notification) {
+            return res.status(404).json({ success: false, message: 'Notification not found' });
+        }
+        res.json({ success: true, message: 'Notification marked as read' });
     } catch (err) {
-        res.status(500).json({ message: '服务器错误' });
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 });
 
-// 标记全部通知为已读
 router.patch('/mark-all-read', authMiddleware, async (req, res) => {
     try {
         await Notification.updateMany(
             { to: req.userId, isRead: false },
-            { $set: { isRead: true } }
+            { isRead: true }
         );
-        res.json({ message: '全部标记为已读' });
+        res.json({ success: true, message: 'All notifications marked as read' });
     } catch (err) {
-        res.status(500).json({ message: '服务器错误' });
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 });
 
