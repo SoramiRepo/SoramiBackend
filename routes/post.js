@@ -3,6 +3,7 @@ import Post from '../models/Post.js';
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -32,7 +33,7 @@ async function getAllReplies(postId) {
 }
 
 // Create post
-router.post('/create', async (req, res) => {
+router.post('/create', authMiddleware, async (req, res) => {
     const token = getTokenFromHeader(req);
     const { content } = req.body;
 
@@ -101,7 +102,7 @@ router.delete('/delete/:id', async (req, res) => {
 });
 
 // Reply to a post
-router.post('/reply/:parentId', async (req, res) => {
+router.post('/reply/:parentId', authMiddleware, async (req, res) => {
     const token = getTokenFromHeader(req);
     const { content } = req.body;
     const { parentId } = req.params;
@@ -128,7 +129,7 @@ router.post('/reply/:parentId', async (req, res) => {
 });
 
 // Repost Post
-router.post('/repost', async (req, res) => {
+router.post('/repost', authMiddleware, async (req, res) => {
     const { repostId } = req.body;
     const token = req.headers.authorization?.split(' ')[1];
     
