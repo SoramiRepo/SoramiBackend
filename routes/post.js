@@ -7,6 +7,8 @@ import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
+router.use(authMiddleware);
+
 const getTokenFromHeader = (req) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -239,6 +241,53 @@ router.get('/fetch', async (req, res) => {
     }
 });
 
+// Like
+router.post('/:postId/like', authMiddleware, async (req, res) => {
+    const { postId } = req.params;
+    const userId = req.userId;
+
+    try {
+        const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ message: 'Post not found' });
+
+        if (post.likes.includes(userId)) {
+            return res.status(400).json({ message: 'Already liked' });
+        }
+
+        post.likes.push(userId);
+        await post.save();
+
+        res.json({ message: 'Liked successfully' });
+    } catch (err) {
+        console.error('Like Error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Unlike
+router.post('/:postId/unlike', authMiddleware, async (req, res) => {
+    const { postId } = req.params;
+    const userId = req.userId;
+
+    try {
+        const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ message: 'Post not found' });
+
+        const index = post.likes.indexOf(userId);
+        if (index === -1) {
+            return res.status(400).json({ message: 'Not liked yet' });
+        }
+
+        post.likes.splice(index, 1);
+        await post.save();
+
+        res.json({ message: 'Unliked successfully' });
+    } catch (err) {
+        console.error('Unlike Error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 // Get a single post and all its nested replies
 router.get('/:id', async (req, res) => {
     try {
@@ -250,17 +299,32 @@ router.get('/:id', async (req, res) => {
                     path: 'author',
                     select: 'username avatarname avatarimg badges',
                 }
-            })
+            });
 
         if (!post) return res.status(404).json({ message: 'Post does not exist' });
 
         const replies = await getAllReplies(post._id);
 
-        res.json({ post, replies });
+        const userId = req.userId ? req.userId : null;
+
+        const formattedPost = {
+            ...post.toObject(),
+            likeCount: post.likes?.length || 0,
+            isLiked: userId ? post.likes?.some(id => id.equals(userId)) : false,
+        };
+
+        const formattedReplies = replies.map(reply => ({
+            ...reply.toObject(),
+            likeCount: reply.likes?.length || 0,
+            isLiked: userId ? reply.likes?.some(id => id.equals(userId)) : false,
+        }));
+
+        res.json({ post: formattedPost, replies: formattedReplies });
     } catch (err) {
         console.error('Fetch Single Post Error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 });
+
 
 export default router;
