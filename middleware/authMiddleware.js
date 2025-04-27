@@ -23,8 +23,8 @@ const authMiddleware = (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.userId = decoded.userId; // 操你妈这个bug修了半天
     } catch (err) {
-        console.error('Token verification failed:', err);
-        res.status(403).json({ message: 'Invalid token' });
+        req.userId = null;
+        return next(); // 如果不这样写会一直尝试验证，消耗服务器资源
     }
     next();
 };

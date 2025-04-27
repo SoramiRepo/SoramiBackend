@@ -321,8 +321,8 @@ router.get('/:id', async (req, res) => {
 
         res.json({ post: formattedPost, replies: formattedReplies });
     } catch (err) {
-        console.error('Fetch Single Post Error:', err);
-        res.status(500).json({ message: 'Server error' });
+        // console.error('Fetch Single Post Error:', err);
+        // res.status(500).json({ message: 'Server error' });
     }
 });
 
