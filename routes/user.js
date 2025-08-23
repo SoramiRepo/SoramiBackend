@@ -183,9 +183,9 @@ router.get('/search', async (req, res) => {
 
 router.put('/edit-profile', authMiddleware, async (req, res) => {
     try {
-        const { avatarname, avatarimg } = req.body;
+        const { avatarname, avatarimg, bio } = req.body;
 
-        if (!avatarname && !avatarimg) {
+        if (!avatarname && !avatarimg && !bio) {
             return res.status(400).json({ message: 'No data to update.' });
         }
         
@@ -197,18 +197,34 @@ router.put('/edit-profile', authMiddleware, async (req, res) => {
         if (avatarimg !== undefined && (typeof avatarimg !== 'string' || avatarimg.length > 500)) {
             return res.status(400).json({ message: 'Avatar image URL must be a string and less than 500 characters.' });
         }
+        
+        if (bio !== undefined && (typeof bio !== 'string' || bio.length > 500)) {
+            return res.status(400).json({ message: 'Bio must be a string and less than 500 characters.' });
+        }
 
         const user = await User.findById(req.user.userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        if (avatarname) user.avatarname = avatarname;
-        if (avatarimg) user.avatarimg = avatarimg;
+        if (avatarname !== undefined) user.avatarname = avatarname;
+        if (avatarimg !== undefined) user.avatarimg = avatarimg;
+        if (bio !== undefined) user.bio = bio;
 
         await user.save();
 
-        res.json({ message: 'Profile updated successfully.' });
+        res.json({ 
+            message: 'Profile updated successfully.',
+            user: {
+                id: user._id,
+                username: user.username,
+                avatarname: user.avatarname,
+                avatarimg: user.avatarimg,
+                bio: user.bio,
+                registertime: user.registertime,
+                badges: user.badges
+            }
+        });
     } catch (error) {
         console.error('Profile update error:', error);
         res.status(500).json({ message: 'Internal server error.' });
