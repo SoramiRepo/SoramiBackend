@@ -4,10 +4,14 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import morgan from 'morgan';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import connectDB from './utils/db.js';
 import userRoutes from './routes/user.js';
 import postRoutes from './routes/post.js';
 import notificationRoutes from './routes/notification.js';
+import messageRoutes from './routes/message.js';
+import SocketServer from './utils/socketServer.js';
 
 const app = express();
 
@@ -49,6 +53,33 @@ app.use(morgan(logFormat)); // also log to console
 app.use(cors());
 app.use(express.json());
 
+// Security middleware
+app.use(helmet());
+
+// Rate limiting - 调整为更宽松的设置
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // 从100提高到1000，每个IP在15分钟内最多1000个请求
+    message: 'Too many requests from this IP, please try again after 15 minutes',
+    standardHeaders: true, // 返回 `RateLimit-*` headers
+    legacyHeaders: false, // 禁用 `X-RateLimit-*` headers
+    skip: (req) => {
+        // 跳过OPTIONS请求的速率限制
+        return req.method === 'OPTIONS';
+    }
+});
+
+// 为认证相关路由设置更宽松的速率限制
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // 认证相关操作限制更严格
+    message: 'Too many authentication attempts, please try again after 15 minutes',
+    skip: (req) => req.method === 'OPTIONS'
+});
+
+app.use(limiter);
+app.use('/api/user', authLimiter); // 用户相关路由使用更严格的限制
+
 // Connect to DB
 connectDB();
 
@@ -56,6 +87,7 @@ connectDB();
 app.use('/api/user', userRoutes);
 app.use('/api/post', postRoutes);
 app.use('/api/notification', notificationRoutes);
+app.use('/api/message', messageRoutes);
 
 // 404 fallback
 app.use((req, res, next) => {
@@ -82,6 +114,10 @@ Stack: ${err.stack}
 
 // Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`✅ Server started on port ${PORT}`);
 });
+
+// Initialize WebSocket server
+const socketServer = new SocketServer(server);
+console.log('✅ WebSocket server initialized');

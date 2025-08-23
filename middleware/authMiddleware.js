@@ -6,27 +6,37 @@ const authMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        req.userId = null;
-        return next();
+        return res.status(401).json({ message: 'Access token required' });
     }
 
     const token = authHeader.split(' ')[1];
 
     if (!token) {
-        req.userId = null;
-        return next();
+        return res.status(401).json({ message: 'Invalid token format' });
     }
     
     if (process.env.DEBUG) console.log('[DEBUG] authMiddleware -> Token:', token);
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.userId = decoded.userId; // 操你妈这个bug修了半天
+        
+        // 验证token是否过期
+        if (decoded.exp && Date.now() >= decoded.exp * 1000) {
+            return res.status(401).json({ message: 'Token expired' });
+        }
+        
+        // 验证必要字段
+        if (!decoded.userId || !decoded.username) {
+            return res.status(401).json({ message: 'Invalid token payload' });
+        }
+        
+        req.userId = decoded.userId;
+        req.username = decoded.username;
+        next();
     } catch (err) {
-        req.userId = null;
-        return next(); // 如果不这样写会一直尝试验证，消耗服务器资源
+        console.error('Token verification failed:', err.message);
+        return res.status(401).json({ message: 'Invalid or expired token' });
     }
-    next();
 };
 
 export default authMiddleware;
