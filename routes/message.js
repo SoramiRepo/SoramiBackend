@@ -16,7 +16,7 @@ router.use(authMiddleware);
 
 // 测试路由
 router.get('/test', (req, res) => {
-    res.json({ message: 'Message route is working', userId: req.userId });
+            res.json({ message: 'Message route is working', userId: req.user.userId });
 });
 
 // 发送消息

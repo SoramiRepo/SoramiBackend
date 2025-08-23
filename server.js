@@ -11,6 +11,7 @@ import userRoutes from './routes/user.js';
 import postRoutes from './routes/post.js';
 import notificationRoutes from './routes/notification.js';
 import messageRoutes from './routes/message.js';
+import passkeyRoutes from './routes/passkey.js';
 import SocketServer from './utils/socketServer.js';
 
 const app = express();
@@ -88,6 +89,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/post', postRoutes);
 app.use('/api/notification', notificationRoutes);
 app.use('/api/message', messageRoutes);
+app.use('/api/passkey', passkeyRoutes);
 
 // 404 fallback
 app.use((req, res, next) => {

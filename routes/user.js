@@ -198,7 +198,7 @@ router.put('/edit-profile', authMiddleware, async (req, res) => {
             return res.status(400).json({ message: 'Avatar image URL must be a string and less than 500 characters.' });
         }
 
-        const user = await User.findById(req.userId);
+        const user = await User.findById(req.user.userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found.' });
         }

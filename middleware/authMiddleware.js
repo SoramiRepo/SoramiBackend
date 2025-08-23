@@ -35,8 +35,10 @@ const authMiddleware = (req, res, next) => {
             return res.status(401).json({ message: 'Invalid token payload format' });
         }
         
-        req.userId = decoded.userId;
-        req.username = decoded.username;
+        req.user = {
+            userId: decoded.userId,
+            username: decoded.username
+        };
         next();
     } catch (err) {
         if (err.name === 'JsonWebTokenError') {

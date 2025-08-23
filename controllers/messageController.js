@@ -6,7 +6,7 @@ import User from '../models/User.js';
 export const sendMessage = async (req, res) => {
     try {
         const { receiverId, content, messageType = 'text' } = req.body;
-        const senderId = req.userId;
+        const senderId = req.user.userId;
 
         // 验证输入参数
         if (!content || typeof content !== 'string' || content.trim().length === 0) {
@@ -73,7 +73,7 @@ export const sendMessage = async (req, res) => {
 export const getChatHistory = async (req, res) => {
     try {
         const { targetUserId } = req.params;
-        const currentUserId = req.userId;
+        const currentUserId = req.user.userId;
         const { page = 1, limit = 50 } = req.query;
         
         // 验证分页参数
@@ -169,7 +169,7 @@ export const getChatHistory = async (req, res) => {
 // 获取用户的聊天会话列表
 export const getChatSessions = async (req, res) => {
     try {
-        const currentUserId = req.userId;
+        const currentUserId = req.user.userId;
         const { page = 1, limit = 20 } = req.query;
         
         // 验证分页参数
@@ -240,7 +240,7 @@ export const getChatSessions = async (req, res) => {
 export const deleteMessage = async (req, res) => {
     try {
         const { messageId } = req.params;
-        const currentUserId = req.userId;
+        const currentUserId = req.user.userId;
 
         const message = await Message.findById(messageId);
         if (!message) {
@@ -270,7 +270,7 @@ export const deleteMessage = async (req, res) => {
 export const markMessageAsRead = async (req, res) => {
     try {
         const { messageId } = req.params;
-        const currentUserId = req.userId;
+        const currentUserId = req.user.userId;
 
         const message = await Message.findById(messageId);
         if (!message) {
@@ -297,7 +297,7 @@ export const markMessageAsRead = async (req, res) => {
 // 获取未读消息数
 export const getUnreadCount = async (req, res) => {
     try {
-        const currentUserId = req.userId;
+        const currentUserId = req.user.userId;
 
         const sessions = await ChatSession.find({
             participants: currentUserId,

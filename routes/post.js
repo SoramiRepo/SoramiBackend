@@ -343,7 +343,7 @@ router.get('/fetch', async (req, res) => {
 // Like
 router.post('/:postId/like', authMiddleware, async (req, res) => {
     const { postId } = req.params;
-    const userId = req.userId;
+    const userId = req.user.userId;
     
     // 验证帖子ID
     if (!postId || typeof postId !== 'string' || postId.trim().length === 0) {
@@ -376,7 +376,7 @@ router.post('/:postId/like', authMiddleware, async (req, res) => {
 // Unlike
 router.post('/:postId/unlike', authMiddleware, async (req, res) => {
     const { postId } = req.params;
-    const userId = req.userId;
+    const userId = req.user.userId;
     
     // 验证帖子ID
     if (!postId || typeof postId !== 'string' || postId.trim().length === 0) {
@@ -436,7 +436,7 @@ router.get('/:id', async (req, res) => {
 
         const replies = await getAllReplies(post._id);
 
-        const userId = req.userId ? req.userId : null;
+        const userId = req.user ? req.user.userId : null;
 
         const formattedPost = {
             ...post.toObject(),

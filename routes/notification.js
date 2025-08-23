@@ -25,7 +25,7 @@ router.post('/create', authMiddleware, async (req, res) => {
     try {
         const notification = await Notification.create({
             type,
-            from: req.userId,
+            from: req.user.userId,
             to,
             post,
             message,
@@ -39,7 +39,7 @@ router.post('/create', authMiddleware, async (req, res) => {
 
 router.get('/me', authMiddleware, async (req, res) => {
     try {
-        const notifications = await Notification.find({ to: req.userId })
+        const notifications = await Notification.find({ to: req.user.userId })
             .sort({ createdAt: -1 })
             .populate('from', 'username avatarname avatarimg')
             .populate('post', 'content');
@@ -53,7 +53,7 @@ router.get('/me', authMiddleware, async (req, res) => {
 
 router.get('/unread-count', authMiddleware, async (req, res) => {
     try {
-        const count = await Notification.countDocuments({ to: req.userId, isRead: false });
+        const count = await Notification.countDocuments({ to: req.user.userId, isRead: false });
         res.json({ success: true, count });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Server error' });
@@ -63,7 +63,7 @@ router.get('/unread-count', authMiddleware, async (req, res) => {
 router.patch('/read/:id', authMiddleware, async (req, res) => {
     try {
         const notification = await Notification.findOneAndUpdate(
-            { _id: req.params.id, to: req.userId },
+            { _id: req.params.id, to: req.user.userId },
             { isRead: true },
             { new: true }
         );
@@ -79,7 +79,7 @@ router.patch('/read/:id', authMiddleware, async (req, res) => {
 router.patch('/mark-all-read', authMiddleware, async (req, res) => {
     try {
         await Notification.updateMany(
-            { to: req.userId, isRead: false },
+            { to: req.user.userId, isRead: false },
             { isRead: true }
         );
         res.json({ success: true, message: 'All notifications marked as read' });
