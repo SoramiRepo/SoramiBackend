@@ -7,11 +7,13 @@ import morgan from 'morgan';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import connectDB from './utils/db.js';
+import { initializeBucket } from './utils/ossClient.js';
 import userRoutes from './routes/user.js';
 import postRoutes from './routes/post.js';
 import notificationRoutes from './routes/notification.js';
 import messageRoutes from './routes/message.js';
 import passkeyRoutes from './routes/passkey.js';
+import uploadRoutes from './routes/upload.js';
 import SocketServer from './utils/socketServer.js';
 
 const app = express();
@@ -84,12 +86,16 @@ app.use('/api/user', authLimiter); // 用户相关路由使用更严格的限制
 // Connect to DB
 connectDB();
 
+// Initialize MinIO
+initializeBucket().catch(console.error);
+
 // Routes
 app.use('/api/user', userRoutes);
 app.use('/api/post', postRoutes);
 app.use('/api/notification', notificationRoutes);
 app.use('/api/message', messageRoutes);
 app.use('/api/passkey', passkeyRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // 404 fallback
 app.use((req, res, next) => {
