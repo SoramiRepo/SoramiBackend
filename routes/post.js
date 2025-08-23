@@ -24,9 +24,11 @@ async function getAllReplies(postId) {
         .populate('author', 'username avatarname avatarimg badges')
         .populate('repost')
 
-    const allReplies = [...directReplies];
+    // 过滤掉无效的回复（作者不存在的）
+    const validReplies = directReplies.filter(reply => reply && reply.author);
+    const allReplies = [...validReplies];
 
-    for (const reply of directReplies) {
+    for (const reply of validReplies) {
         const subReplies = await getAllReplies(reply._id);
         allReplies.push(...subReplies);
     }
@@ -80,7 +82,10 @@ router.get('/all', async (req, res) => {
                 }
             });
 
-        res.json({ posts });
+        // 过滤掉已删除的帖子（虽然现在使用硬删除，但保留这个逻辑以防将来改为软删除）
+        const validPosts = posts.filter(post => post && post.author);
+
+        res.json({ posts: validPosts });
     } catch (err) {
         console.error('Fetch Posts Error:', err);
         res.status(500).json({ message: 'Server error' });
@@ -105,10 +110,23 @@ router.delete('/delete/:id', async (req, res) => {
         const post = await Post.findById(id);
 
         if (!post) return res.status(404).json({ message: 'Post does not exist' });
+        
+        // 检查帖子是否有效（作者是否存在）
+        if (!post.author) {
+            return res.status(404).json({ message: 'Post author not found' });
+        }
+        
         if (post.author.toString() !== decoded.userId) return res.status(403).json({ message: 'No permission' });
 
-        await Post.findByIdAndDelete(id);
-        res.json({ message: 'Post deleted successfully' });
+        // 删除主帖子及其所有回复
+        await Post.deleteMany({
+            $or: [
+                { _id: id }, // 主帖子
+                { parent: id } // 所有回复
+            ]
+        });
+        
+        res.json({ message: 'Post and all replies deleted successfully' });
 
         if (process.env.DEBUG) console.log(`[DEBUG] -> Post deleted by user ${decoded.userId}`);
     } catch (err) {
@@ -143,6 +161,11 @@ router.post('/reply/:parentId', async (req, res) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const parentPost = await Post.findById(parentId);
         if (!parentPost) return res.status(404).json({ message: 'Original post not found' });
+        
+        // 检查父帖子是否有效（作者是否存在）
+        if (!parentPost.author) {
+            return res.status(404).json({ message: 'Original post author not found' });
+        }
 
         const replyPost = new Post({ content, author: decoded.userId, parent: parentId });
         await replyPost.save();
@@ -186,6 +209,11 @@ router.post('/repost', async (req, res) => {
         if (!originalPost) {
             return res.status(404).json({ message: 'Original post not found or has been deleted' });
         }
+        
+        // 检查原始帖子是否有效（作者是否存在）
+        if (!originalPost.author) {
+            return res.status(404).json({ message: 'Original post author not found' });
+        }
 
         // Create the repost
         const newPost = new Post({
@@ -195,6 +223,21 @@ router.post('/repost', async (req, res) => {
         });
 
         await newPost.save();
+
+        // Create notification for repost
+        try {
+            const Notification = (await import('../models/Notification.js')).default;
+            await Notification.create({
+                type: 'repost',
+                from: userId,
+                to: originalPost.author._id,
+                post: repostId,
+                message: `${decoded.username} reposted your post`
+            });
+        } catch (notificationErr) {
+            console.error('Failed to create repost notification:', notificationErr);
+            // 通知创建失败不影响repost操作
+        }
 
         // Populate repost author data correctly
         const populatedPost = await Post.findById(newPost._id)
@@ -231,7 +274,10 @@ router.get('/:id/replies', async (req, res) => {
             .populate('author', 'username avatarname avatarimg badges')
             .populate('repost')
 
-        res.json({ replies });
+        // 过滤掉无效的回复（作者不存在的）
+        const validReplies = replies.filter(reply => reply && reply.author);
+
+        res.json({ replies: validReplies });
     } catch (err) {
         console.error('Fetch Replies Error:', err);
         res.status(500).json({ message: 'Server error' });
@@ -284,7 +330,10 @@ router.get('/fetch', async (req, res) => {
             return { ...post.toObject(), replies };
         }));
 
-        res.json({ posts: postsWithReplies });
+        // 过滤掉无效的帖子（作者不存在的）
+        const validPosts = postsWithReplies.filter(post => post && post.author);
+
+        res.json({ posts: validPosts });
     } catch (err) {
         console.error('Fetch Posts with Replies Error:', err);
         res.status(500).json({ message: 'Server error' });
@@ -304,6 +353,11 @@ router.post('/:postId/like', authMiddleware, async (req, res) => {
     try {
         const post = await Post.findById(postId);
         if (!post) return res.status(404).json({ message: 'Post not found' });
+        
+        // 检查帖子是否有效（作者是否存在）
+        if (!post.author) {
+            return res.status(404).json({ message: 'Post author not found' });
+        }
 
         if (post.likes.includes(userId)) {
             return res.status(400).json({ message: 'Already liked' });
@@ -332,6 +386,11 @@ router.post('/:postId/unlike', authMiddleware, async (req, res) => {
     try {
         const post = await Post.findById(postId);
         if (!post) return res.status(404).json({ message: 'Post not found' });
+        
+        // 检查帖子是否有效（作者是否存在）
+        if (!post.author) {
+            return res.status(404).json({ message: 'Post author not found' });
+        }
 
         const index = post.likes.indexOf(userId);
         if (index === -1) {
@@ -369,6 +428,11 @@ router.get('/:id', async (req, res) => {
             });
 
         if (!post) return res.status(404).json({ message: 'Post does not exist' });
+        
+        // 检查帖子是否有效（作者是否存在）
+        if (!post.author) {
+            return res.status(404).json({ message: 'Post author not found' });
+        }
 
         const replies = await getAllReplies(post._id);
 
