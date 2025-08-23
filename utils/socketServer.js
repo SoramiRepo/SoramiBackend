@@ -123,6 +123,27 @@ class SocketServer {
             const { receiverId, content, messageType = 'text' } = data;
             const senderId = socket.userId;
             
+            // 验证输入参数
+            if (!content || typeof content !== 'string' || content.trim().length === 0) {
+                socket.emit('error', { message: 'Valid message content is required' });
+                return;
+            }
+            
+            if (content.length > 1000) {
+                socket.emit('error', { message: 'Message content too long (max 1000 characters)' });
+                return;
+            }
+            
+            if (!receiverId || typeof receiverId !== 'string') {
+                socket.emit('error', { message: 'Valid receiver ID is required' });
+                return;
+            }
+            
+            if (!['text', 'image', 'file'].includes(messageType)) {
+                socket.emit('error', { message: 'Invalid message type' });
+                return;
+            }
+            
             // 验证接收者
             const receiver = await User.findById(receiverId);
             if (!receiver) {

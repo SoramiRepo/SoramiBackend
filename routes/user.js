@@ -28,6 +28,18 @@ router.post('/login', async (req, res) => {
     if (typeof username !== 'string' || typeof password !== 'string') {
         return res.status(400).json({ message: 'Username and password are required.' });
     }
+    
+    if (!username.trim() || !password.trim()) {
+        return res.status(400).json({ message: 'Username and password cannot be empty.' });
+    }
+    
+    if (username.length < 3 || username.length > 20) {
+        return res.status(400).json({ message: 'Username must be between 3 and 20 characters.' });
+    }
+    
+    if (password.length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+    }
 
     try {
         const user = await User.findOne({ username });
@@ -80,6 +92,27 @@ router.post('/register', async (req, res) => {
     if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
     }
+    
+    if (!username.trim() || !password.trim()) {
+        return res.status(400).json({ message: 'Username and password cannot be empty.' });
+    }
+    
+    if (username.length < 3 || username.length > 20) {
+        return res.status(400).json({ message: 'Username must be between 3 and 20 characters.' });
+    }
+    
+    if (password.length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
+    }
+    
+    // 验证可选字段
+    if (avatarname && (typeof avatarname !== 'string' || avatarname.length > 50)) {
+        return res.status(400).json({ message: 'Avatar name must be a string and less than 50 characters.' });
+    }
+    
+    if (bio && (typeof bio !== 'string' || bio.length > 500)) {
+        return res.status(400).json({ message: 'Bio must be a string and less than 500 characters.' });
+    }
 
     try {
         const existingUser = await User.findOne({ username });
@@ -126,6 +159,10 @@ router.get('/search', async (req, res) => {
     if (typeof keyword !== 'string' || !keyword.trim()) {
         return res.status(400).json({ message: 'Invalid search keyword.' });
     }
+    
+    if (keyword.trim().length < 1 || keyword.trim().length > 50) {
+        return res.status(400).json({ message: 'Search keyword must be between 1 and 50 characters.' });
+    }
 
     try {
         const regex = new RegExp(keyword.trim(), 'i');
@@ -151,6 +188,15 @@ router.put('/edit-profile', authMiddleware, async (req, res) => {
         if (!avatarname && !avatarimg) {
             return res.status(400).json({ message: 'No data to update.' });
         }
+        
+        // 验证输入字段
+        if (avatarname !== undefined && (typeof avatarname !== 'string' || avatarname.length > 50)) {
+            return res.status(400).json({ message: 'Avatar name must be a string and less than 50 characters.' });
+        }
+        
+        if (avatarimg !== undefined && (typeof avatarimg !== 'string' || avatarimg.length > 500)) {
+            return res.status(400).json({ message: 'Avatar image URL must be a string and less than 500 characters.' });
+        }
 
         const user = await User.findById(req.userId);
         if (!user) {
@@ -175,6 +221,11 @@ router.post('/follow/:targetId', authMiddleware, async (req, res) => {
 
     if (userId === targetId) {
         return res.status(400).json({ message: 'You cannot follow yourself.' });
+    }
+    
+    // 验证目标用户ID格式
+    if (!targetId || typeof targetId !== 'string' || targetId.trim().length === 0) {
+        return res.status(400).json({ message: 'Valid target user ID is required.' });
     }
 
     try {
@@ -215,6 +266,11 @@ router.post('/unfollow/:targetId', authMiddleware, async (req, res) => {
     if (userId === targetId) {
         return res.status(400).json({ message: 'You cannot unfollow yourself.' });
     }
+    
+    // 验证目标用户ID格式
+    if (!targetId || typeof targetId !== 'string' || targetId.trim().length === 0) {
+        return res.status(400).json({ message: 'Valid target user ID is required.' });
+    }
 
     try {
         const [user, target] = await Promise.all([
@@ -249,6 +305,14 @@ router.post('/unfollow/:targetId', authMiddleware, async (req, res) => {
 
 router.get('/:username', async (req, res) => {
     const { username } = req.params;
+
+    if (!username || typeof username !== 'string' || username.trim().length === 0) {
+        return res.status(400).json({ message: 'Valid username is required.' });
+    }
+    
+    if (username.length < 3 || username.length > 20) {
+        return res.status(400).json({ message: 'Username must be between 3 and 20 characters.' });
+    }
 
     try {
         const user = await User.findOne({ username })

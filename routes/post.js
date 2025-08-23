@@ -35,11 +35,20 @@ async function getAllReplies(postId) {
 }
 
 // Create post
-router.post('/create', authMiddleware, async (req, res) => {
+router.post('/create', async (req, res) => {
     const token = getTokenFromHeader(req);
     const { content } = req.body;
 
     if (!token) return res.status(401).json({ message: 'Missing token' });
+    
+    // 验证内容
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+        return res.status(400).json({ message: 'Post content is required' });
+    }
+    
+    if (content.length > 1000) {
+        return res.status(400).json({ message: 'Post content too long (max 1000 characters)' });
+    }
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -85,6 +94,11 @@ router.delete('/delete/:id', async (req, res) => {
     const { id } = req.params;
 
     if (!token) return res.status(401).json({ message: 'Missing token' });
+    
+    // 验证帖子ID
+    if (!id || typeof id !== 'string' || id.trim().length === 0) {
+        return res.status(400).json({ message: 'Valid post ID is required' });
+    }
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -104,12 +118,26 @@ router.delete('/delete/:id', async (req, res) => {
 });
 
 // Reply to a post
-router.post('/reply/:parentId', authMiddleware, async (req, res) => {
+router.post('/reply/:parentId', async (req, res) => {
     const token = getTokenFromHeader(req);
     const { content } = req.body;
     const { parentId } = req.params;
 
     if (!token) return res.status(401).json({ message: 'Missing token' });
+    
+    // 验证内容
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+        return res.status(400).json({ message: 'Reply content is required' });
+    }
+    
+    if (content.length > 1000) {
+        return res.status(400).json({ message: 'Reply content too long (max 1000 characters)' });
+    }
+    
+    // 验证父帖子ID
+    if (!parentId || typeof parentId !== 'string' || parentId.trim().length === 0) {
+        return res.status(400).json({ message: 'Valid parent post ID is required' });
+    }
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -131,7 +159,7 @@ router.post('/reply/:parentId', authMiddleware, async (req, res) => {
 });
 
 // Repost Post
-router.post('/repost', authMiddleware, async (req, res) => {
+router.post('/repost', async (req, res) => {
     const { repostId } = req.body;
     const token = req.headers.authorization?.split(' ')[1];
     
@@ -190,8 +218,15 @@ router.post('/repost', authMiddleware, async (req, res) => {
 
 // Get direct replies
 router.get('/:id/replies', async (req, res) => {
+    const { id } = req.params;
+    
+    // 验证帖子ID
+    if (!id || typeof id !== 'string' || id.trim().length === 0) {
+        return res.status(400).json({ message: 'Valid post ID is required' });
+    }
+    
     try {
-        const replies = await Post.find({ parent: req.params.id })
+        const replies = await Post.find({ parent: id })
             .sort({ createdAt: 1 })
             .populate('author', 'username avatarname avatarimg badges')
             .populate('repost')
@@ -209,15 +244,30 @@ router.get('/fetch', async (req, res) => {
         const { userId, keyword, limit = 20 } = req.query;
         const query = {};
 
-        if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+        // 验证用户ID
+        if (userId) {
+            if (typeof userId !== 'string' || !mongoose.Types.ObjectId.isValid(userId)) {
+                return res.status(400).json({ message: 'Invalid user ID format' });
+            }
             query.author = userId;
         }
 
+        // 验证关键词
         if (keyword) {
-            query.content = { $regex: keyword, $options: 'i' };
+            if (typeof keyword !== 'string' || keyword.trim().length === 0) {
+                return res.status(400).json({ message: 'Invalid keyword' });
+            }
+            if (keyword.length > 100) {
+                return res.status(400).json({ message: 'Keyword too long (max 100 characters)' });
+            }
+            query.content = { $regex: keyword.trim(), $options: 'i' };
         }
 
-        const parsedLimit = Math.max(1, parseInt(limit) || 20);
+        // 验证限制数量
+        const parsedLimit = parseInt(limit);
+        if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+            return res.status(400).json({ message: 'Invalid limit (must be between 1 and 100)' });
+        }
 
         const posts = await Post.find(query)
             .sort({ createdAt: -1 })
@@ -245,6 +295,11 @@ router.get('/fetch', async (req, res) => {
 router.post('/:postId/like', authMiddleware, async (req, res) => {
     const { postId } = req.params;
     const userId = req.userId;
+    
+    // 验证帖子ID
+    if (!postId || typeof postId !== 'string' || postId.trim().length === 0) {
+        return res.status(400).json({ message: 'Valid post ID is required' });
+    }
 
     try {
         const post = await Post.findById(postId);
@@ -268,6 +323,11 @@ router.post('/:postId/like', authMiddleware, async (req, res) => {
 router.post('/:postId/unlike', authMiddleware, async (req, res) => {
     const { postId } = req.params;
     const userId = req.userId;
+    
+    // 验证帖子ID
+    if (!postId || typeof postId !== 'string' || postId.trim().length === 0) {
+        return res.status(400).json({ message: 'Valid post ID is required' });
+    }
 
     try {
         const post = await Post.findById(postId);
@@ -290,8 +350,15 @@ router.post('/:postId/unlike', authMiddleware, async (req, res) => {
 
 // Get a single post and all its nested replies
 router.get('/:id', async (req, res) => {
+    const { id } = req.params;
+    
+    // 验证帖子ID
+    if (!id || typeof id !== 'string' || id.trim().length === 0) {
+        return res.status(400).json({ message: 'Valid post ID is required' });
+    }
+    
     try {
-        const post = await Post.findById(req.params.id)
+        const post = await Post.findById(id)
             .populate('author', 'username avatarname avatarimg badges')
             .populate({
                 path: 'repost',
@@ -321,8 +388,8 @@ router.get('/:id', async (req, res) => {
 
         res.json({ post: formattedPost, replies: formattedReplies });
     } catch (err) {
-        // console.error('Fetch Single Post Error:', err);
-        // res.status(500).json({ message: 'Server error' });
+        console.error('Fetch Single Post Error:', err);
+        res.status(500).json({ message: 'Server error' });
     }
 });
 

@@ -116,8 +116,22 @@ Stack: ${err.stack}
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
     console.log(`✅ Server started on port ${PORT}`);
+}).on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use`);
+        console.error('Please try a different port or stop the process using this port');
+    } else {
+        console.error('❌ Server startup error:', error);
+    }
+    process.exit(1);
 });
 
 // Initialize WebSocket server
-const socketServer = new SocketServer(server);
-console.log('✅ WebSocket server initialized');
+try {
+    const socketServer = new SocketServer(server);
+    console.log('✅ WebSocket server initialized');
+} catch (error) {
+    console.error('❌ WebSocket server initialization failed:', error);
+    server.close();
+    process.exit(1);
+}

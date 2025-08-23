@@ -10,6 +10,17 @@ router.post('/create', authMiddleware, async (req, res) => {
     if (!type || !to) {
         return res.status(400).json({ success: false, message: 'Missing required fields: type or to' });
     }
+    
+    // 验证通知类型
+    const validTypes = ['like', 'reply', 'follow', 'repost', 'message'];
+    if (!validTypes.includes(type)) {
+        return res.status(400).json({ success: false, message: 'Invalid notification type' });
+    }
+    
+    // 验证接收者ID格式
+    if (typeof to !== 'string' || to.trim().length === 0) {
+        return res.status(400).json({ success: false, message: 'Valid recipient ID is required' });
+    }
 
     try {
         const notification = await Notification.create({

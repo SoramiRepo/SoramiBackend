@@ -8,6 +8,23 @@ export const sendMessage = async (req, res) => {
         const { receiverId, content, messageType = 'text' } = req.body;
         const senderId = req.userId;
 
+        // 验证输入参数
+        if (!content || typeof content !== 'string' || content.trim().length === 0) {
+            return res.status(400).json({ message: 'Valid message content is required' });
+        }
+        
+        if (content.length > 1000) {
+            return res.status(400).json({ message: 'Message content too long (max 1000 characters)' });
+        }
+        
+        if (!receiverId || typeof receiverId !== 'string') {
+            return res.status(400).json({ message: 'Valid receiver ID is required' });
+        }
+        
+        if (!['text', 'image', 'file'].includes(messageType)) {
+            return res.status(400).json({ message: 'Invalid message type' });
+        }
+
         // 验证接收者是否存在
         const receiver = await User.findById(receiverId);
         if (!receiver) {
@@ -58,6 +75,18 @@ export const getChatHistory = async (req, res) => {
         const { targetUserId } = req.params;
         const currentUserId = req.userId;
         const { page = 1, limit = 50 } = req.query;
+        
+        // 验证分页参数
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        
+        if (isNaN(pageNum) || pageNum < 1) {
+            return res.status(400).json({ message: 'Invalid page number' });
+        }
+        
+        if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
+            return res.status(400).json({ message: 'Invalid limit (must be between 1 and 100)' });
+        }
 
         // 验证目标用户是否存在
         const targetUser = await User.findById(targetUserId);
@@ -79,7 +108,7 @@ export const getChatHistory = async (req, res) => {
         }
 
         // 获取消息
-        const skip = (page - 1) * limit;
+        const skip = (pageNum - 1) * limitNum;
         const messages = await Message.find({
             $or: [
                 { sender: currentUserId, receiver: targetUserId },
@@ -124,10 +153,10 @@ export const getChatHistory = async (req, res) => {
             messages: messages.reverse(), // 按时间正序返回
             session,
             pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
+                page: pageNum,
+                limit: limitNum,
                 total,
-                pages: Math.ceil(total / limit)
+                pages: Math.ceil(total / limitNum)
             }
         });
 
@@ -142,8 +171,20 @@ export const getChatSessions = async (req, res) => {
     try {
         const currentUserId = req.userId;
         const { page = 1, limit = 20 } = req.query;
+        
+        // 验证分页参数
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        
+        if (isNaN(pageNum) || pageNum < 1) {
+            return res.status(400).json({ message: 'Invalid page number' });
+        }
+        
+        if (isNaN(limitNum) || limitNum < 1 || limitNum > 50) {
+            return res.status(400).json({ message: 'Invalid limit (must be between 1 and 50)' });
+        }
 
-        const skip = (page - 1) * limit;
+        const skip = (pageNum - 1) * limitNum;
 
         // 查找用户的聊天会话
         const sessions = await ChatSession.find({
@@ -182,10 +223,10 @@ export const getChatSessions = async (req, res) => {
         res.json({
             sessions: processedSessions,
             pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
+                page: pageNum,
+                limit: limitNum,
                 total,
-                pages: Math.ceil(total / limit)
+                pages: Math.ceil(total / limitNum)
             }
         });
 
