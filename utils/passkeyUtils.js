@@ -14,17 +14,24 @@ export const getRPID = () => {
 
 // 获取RP Origin
 export const getRPOrigin = () => {
-    const rpOrigin = process.env.RP_ORIGIN || 'http://localhost:3000';
+    const rpOrigin = process.env.RP_ORIGIN || 'http://localhost:5174';
     return rpOrigin;
+};
+
+// 获取RP Name
+export const getRPName = () => {
+    const rpName = process.env.RP_NAME || 'Sorami';
+    return rpName;
 };
 
 // 生成注册选项
 export const generatePasskeyRegistrationOptions = async (user) => {
     const rpID = getRPID();
     const rpOrigin = getRPOrigin();
+    const rpName = getRPName();
     
     const options = await generateRegistrationOptions({
-        rpName: 'Sorami',
+        rpName,
         rpID,
         userID: new TextEncoder().encode(user._id.toString()),
         userName: user.username,
@@ -48,26 +55,10 @@ export const generatePasskeyRegistrationOptions = async (user) => {
 // 验证注册响应
 export const verifyPasskeyRegistration = async (response, expectedChallenge, expectedOrigin, expectedRPID) => {
     try {
-        // 确保挑战格式正确
-        let challengeToUse = expectedChallenge;
-
-        // 挑战现在总是库生成的格式，需要正确处理
-        if (typeof expectedChallenge === 'string') {
-            try {
-                // 尝试解码为Buffer（支持Base64URL格式）
-                challengeToUse = isoBase64URL.toBuffer(expectedChallenge);
-            } catch (e) {
-                console.error('Failed to decode challenge:', e);
-                throw new Error('Invalid challenge format');
-            }
-        } else if (expectedChallenge instanceof Uint8Array) {
-            // 如果挑战已经是Uint8Array，直接使用
-            challengeToUse = expectedChallenge;
-        }
-
+        // Use the challenge directly as provided by the library
         const verification = await verifyRegistrationResponse({
             response,
-            expectedChallenge: challengeToUse,
+            expectedChallenge,
             expectedOrigin,
             expectedRPID,
             requireUserVerification: false,
@@ -109,26 +100,10 @@ export const generatePasskeyAuthenticationOptions = async (userPasskeys) => {
 // 验证认证响应
 export const verifyPasskeyAuthentication = async (response, expectedChallenge, expectedOrigin, expectedRPID, userPasskey) => {
     try {
-        // 确保挑战格式正确
-        let challengeToUse = expectedChallenge;
-
-        // 挑战现在总是库生成的格式，需要正确处理
-        if (typeof expectedChallenge === 'string') {
-            try {
-                // 尝试解码为Buffer（支持Base64URL格式）
-                challengeToUse = isoBase64URL.toBuffer(expectedChallenge);
-            } catch (e) {
-                console.error('Failed to decode challenge:', e);
-                throw new Error('Invalid challenge format');
-            }
-        } else if (expectedChallenge instanceof Uint8Array) {
-            // 如果挑战已经是Uint8Array，直接使用
-            challengeToUse = expectedChallenge;
-        }
-
+        // Use the challenge directly as provided by the library
         const verification = await verifyAuthenticationResponse({
             response,
-            expectedChallenge: challengeToUse,
+            expectedChallenge,
             expectedOrigin,
             expectedRPID,
             authenticator: {

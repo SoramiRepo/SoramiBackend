@@ -43,7 +43,8 @@ router.post('/generate-registration-options', authMiddleware, async (req, res) =
             type: 'registration',
             timestamp: new Date(),
             rpID,
-            rpOrigin
+            rpOrigin,
+            originalChallenge: challenge // 存储原始挑战
         });
 
         // 设置挑战过期时间（5分钟后自动清理）
@@ -70,26 +71,33 @@ router.post('/generate-registration-options', authMiddleware, async (req, res) =
 // 验证passkey注册
 router.post('/verify-registration', authMiddleware, async (req, res) => {
     try {
-        const { response } = req.body;
+        const { response, challenge } = req.body;
         
         if (!response) {
             return res.status(400).json({ message: 'Response is required.' });
         }
 
-        // 从WebAuthn响应中提取挑战
-        // 根据WebAuthn规范，挑战信息在response.clientDataJSON中
-        let challenge;
-        try {
-            const clientData = JSON.parse(Buffer.from(response.clientDataJSON, 'base64').toString());
-            challenge = clientData.challenge;
-        } catch (e) {
-            console.error('Failed to parse clientDataJSON:', e);
-            return res.status(400).json({ message: 'Invalid WebAuthn response format.' });
+        if (!challenge) {
+            return res.status(400).json({ message: 'Challenge is required.' });
         }
 
-        console.log('Extracted challenge from response:', challenge);
+        // Debug: Log the response object structure
+        if (DEBUG) {
+            console.log('Received response object keys:', Object.keys(response));
+            console.log('Received challenge:', challenge);
+            console.log('Response structure:', JSON.stringify(response, null, 2));
+        }
+
+        console.log('Received challenge from frontend:', challenge);
+        console.log('Challenges Map keys:', Array.from(challenges.keys()));
+        
         const challengeData = challenges.get(challenge);
         if (!challengeData || challengeData.type !== 'registration') {
+            // 尝试查找匹配的挑战（用于调试）
+            console.log('Challenge not found in map, searching for matches...');
+            for (const [key, value] of challenges.entries()) {
+                console.log(`Stored challenge: "${key}", type: ${value.type}`);
+            }
             return res.status(400).json({ message: 'Invalid or expired challenge.' });
         }
 
@@ -107,10 +115,13 @@ router.post('/verify-registration', authMiddleware, async (req, res) => {
         }
 
         // 验证注册响应
-        // 根据WebAuthn规范，我们使用从响应中提取的挑战进行验证
+        // 使用存储的原始挑战进行验证
+        console.log('Using challenge for verification:', challenge);
+        console.log('Challenge type:', typeof challenge);
+        
         const verification = await verifyPasskeyRegistration(
             response,
-            challenge, // 使用从响应中提取的挑战
+            challenge, // 直接使用挑战，不做任何转换
             rpOrigin,
             rpID
         );
@@ -208,21 +219,21 @@ router.post('/generate-authentication-options', async (req, res) => {
 // 验证passkey认证
 router.post('/verify-authentication', async (req, res) => {
     try {
-        const { response } = req.body;
+        const { response, challenge } = req.body;
         
         if (!response) {
             return res.status(400).json({ message: 'Response is required.' });
         }
 
-        // 从WebAuthn响应中提取挑战
-        // 根据WebAuthn规范，挑战信息在response.clientDataJSON中
-        let challenge;
-        try {
-            const clientData = JSON.parse(Buffer.from(response.clientDataJSON, 'base64').toString());
-            challenge = clientData.challenge;
-        } catch (e) {
-            console.error('Failed to parse clientDataJSON:', e);
-            return res.status(400).json({ message: 'Invalid WebAuthn response format.' });
+        if (!challenge) {
+            return res.status(400).json({ message: 'Challenge is required.' });
+        }
+
+        // Debug: Log the response object structure
+        if (DEBUG) {
+            console.log('Received authentication response object keys:', Object.keys(response));
+            console.log('Received challenge:', challenge);
+            console.log('Authentication response structure:', JSON.stringify(response, null, 2));
         }
 
         console.log('Extracted challenge from response:', challenge);
