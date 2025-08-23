@@ -1,3 +1,5 @@
+import { webcrypto } from 'crypto';
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
