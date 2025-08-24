@@ -1,6 +1,7 @@
 import Message from '../models/Message.js';
 import ChatSession from '../models/ChatSession.js';
 import User from '../models/User.js';
+import logger from '../utils/logger.js';
 
 // 发送消息
 export const sendMessage = async (req, res) => {
@@ -64,7 +65,7 @@ export const sendMessage = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Send message error:', error);
+        logger.error('Send message error', error);
         res.status(500).json({ message: 'Failed to send message' });
     }
 };
@@ -161,7 +162,7 @@ export const getChatHistory = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Get chat history error:', error);
+        logger.error('Get chat history error', error);
         res.status(500).json({ message: 'Failed to get chat history' });
     }
 };
@@ -231,7 +232,7 @@ export const getChatSessions = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Get chat sessions error:', error);
+        logger.error('Get chat sessions error', error);
         res.status(500).json({ message: 'Failed to get chat sessions' });
     }
 };
@@ -261,7 +262,7 @@ export const deleteMessage = async (req, res) => {
         res.json({ message: 'Message deleted successfully' });
 
     } catch (error) {
-        console.error('Delete message error:', error);
+        logger.error('Delete message error', error);
         res.status(500).json({ message: 'Failed to delete message' });
     }
 };
@@ -289,7 +290,7 @@ export const markMessageAsRead = async (req, res) => {
         res.json({ message: 'Message marked as read' });
 
     } catch (error) {
-        console.error('Mark message as read error:', error);
+        logger.error('Mark message as read error', error);
         res.status(500).json({ message: 'Failed to mark message as read' });
     }
 };
@@ -311,7 +312,7 @@ export const getUnreadCount = async (req, res) => {
         res.json({ unreadCount: totalUnread });
 
     } catch (error) {
-        console.error('Get unread count error:', error);
+        logger.error('Get unread count error', error);
         res.status(500).json({ message: 'Failed to get unread count' });
     }
 };

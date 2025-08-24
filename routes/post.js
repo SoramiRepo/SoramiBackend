@@ -39,7 +39,7 @@ async function getAllReplies(postId) {
 // Create post
 router.post('/create', async (req, res) => {
     const token = getTokenFromHeader(req);
-    const { content } = req.body;
+    const { content, images } = req.body;
 
     if (!token) return res.status(401).json({ message: 'Missing token' });
     
@@ -52,16 +52,33 @@ router.post('/create', async (req, res) => {
         return res.status(400).json({ message: 'Post content too long (max 1000 characters)' });
     }
 
+    // 验证图片数据
+    if (images && Array.isArray(images)) {
+        if (images.length > 9) {
+            return res.status(400).json({ message: 'Maximum 9 images allowed per post' });
+        }
+        
+        for (const image of images) {
+            if (!image.url || !image.filename) {
+                return res.status(400).json({ message: 'Invalid image data' });
+            }
+        }
+    }
+
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const newPost = new Post({ content, author: decoded.userId });
+        const newPost = new Post({ 
+            content, 
+            author: decoded.userId,
+            images: images || []
+        });
         await newPost.save();
 
         const populatedPost = await newPost.populate('author', 'username avatarname avatarimg badges')
 
         res.json({ message: 'Post created successfully', post: populatedPost });
 
-        if (process.env.DEBUG) console.log(`[DEBUG] -> User posted`);
+        if (process.env.DEBUG) console.log(`[DEBUG] -> User posted with ${images ? images.length : 0} images`);
     } catch (err) {
         console.error('Post Error:', err);
         res.status(500).json({ message: 'Server error' });

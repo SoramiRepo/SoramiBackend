@@ -1,5 +1,6 @@
 import { Client } from 'minio';
 import dotenv from 'dotenv';
+import logger from './logger.js';
 
 dotenv.config();
 
@@ -19,18 +20,26 @@ const ossConfig = {
 
 // 创建客户端（当前支持 MinIO/S3 兼容）
 const createOSSClient = () => {
-    switch (ossConfig.provider) {
-        case 'minio':
-        case 'aws-s3':
-        default:
-            return new Client({
-                endPoint: ossConfig.endpoint,
-                port: ossConfig.port,
-                useSSL: ossConfig.useSSL,
-                accessKey: ossConfig.accessKey,
-                secretKey: ossConfig.secretKey,
-                region: ossConfig.region
-            });
+    try {
+        switch (ossConfig.provider) {
+            case 'minio':
+            case 'aws-s3':
+            default:
+                return new Client({
+                    endPoint: ossConfig.endpoint,
+                    port: ossConfig.port,
+                    useSSL: ossConfig.useSSL,
+                    accessKey: ossConfig.accessKey,
+                    secretKey: ossConfig.secretKey,
+                    region: ossConfig.region,
+                    // 增加超时配置
+                    connectTimeout: 10000,
+                    readTimeout: 30000
+                });
+        }
+    } catch (error) {
+        logger.error('Failed to create OSS client', error);
+        throw error;
     }
 };
 
@@ -52,13 +61,13 @@ export const initializeBucket = async () => {
         const bucketName = getBucketName();
         const config = getOSSConfig();
         
-        console.log(`🔧 Initializing ${config.provider.toUpperCase()} bucket: ${bucketName}`);
+        logger.file(`Initializing ${config.provider.toUpperCase()} bucket`, bucketName);
         
         const bucketExists = await ossClient.bucketExists(bucketName);
         
         if (!bucketExists) {
             await ossClient.makeBucket(bucketName, config.region);
-            console.log(`✅ ${config.provider.toUpperCase()} bucket '${bucketName}' created successfully`);
+            logger.success(`${config.provider.toUpperCase()} bucket '${bucketName}' created successfully`);
             
             // 设置存储桶策略，允许公开读取（如果启用）
             if (config.publicRead) {
@@ -76,16 +85,16 @@ export const initializeBucket = async () => {
                 
                 try {
                     await ossClient.setBucketPolicy(bucketName, JSON.stringify(policy));
-                    console.log(`✅ ${config.provider.toUpperCase()} bucket '${bucketName}' policy set to public read`);
+                    logger.success(`${config.provider.toUpperCase()} bucket '${bucketName}' policy set to public read`);
                 } catch (policyError) {
-                    console.warn(`⚠️ Could not set public read policy: ${policyError.message}`);
+                    logger.warn(`Could not set public read policy: ${policyError.message}`);
                 }
             }
         } else {
-            console.log(`✅ ${config.provider.toUpperCase()} bucket '${bucketName}' already exists`);
+            logger.success(`${config.provider.toUpperCase()} bucket '${bucketName}' already exists`);
         }
     } catch (error) {
-        console.error(`❌ ${ossConfig.provider.toUpperCase()} bucket initialization error:`, error);
+        logger.error(`${ossConfig.provider.toUpperCase()} bucket initialization error`, error);
         throw error;
     }
 };

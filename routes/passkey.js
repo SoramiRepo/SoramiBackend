@@ -2,6 +2,7 @@ import express from 'express';
 import Passkey from '../models/Passkey.js';
 import User from '../models/User.js';
 import authMiddleware from '../middleware/authMiddleware.js';
+import logger from '../utils/logger.js';
 import {
     generatePasskeyRegistrationOptions,
     verifyPasskeyRegistration,
@@ -53,7 +54,7 @@ router.post('/generate-registration-options', authMiddleware, async (req, res) =
         }, 5 * 60 * 1000);
 
         if (DEBUG) {
-            console.log('Generated registration options for user:', userId);
+            logger.debug('Generated registration options for user', { userId });
         }
 
         res.json({
@@ -63,7 +64,7 @@ router.post('/generate-registration-options', authMiddleware, async (req, res) =
             rpOrigin
         });
     } catch (error) {
-        console.error('Error generating registration options:', error);
+        logger.error('Error generating registration options', error);
         res.status(500).json({ message: 'Failed to generate registration options.' });
     }
 });
@@ -83,20 +84,20 @@ router.post('/verify-registration', authMiddleware, async (req, res) => {
 
         // Debug: Log the response object structure
         if (DEBUG) {
-            console.log('Received response object keys:', Object.keys(response));
-            console.log('Received challenge:', challenge);
-            console.log('Response structure:', JSON.stringify(response, null, 2));
+            logger.debug('Received response object keys', { keys: Object.keys(response) });
+            logger.debug('Received challenge', { challenge });
+            logger.debug('Response structure', { structure: JSON.stringify(response, null, 2) });
         }
 
-        console.log('Received challenge from frontend:', challenge);
-        console.log('Challenges Map keys:', Array.from(challenges.keys()));
+        logger.debug('Received challenge from frontend', { challenge });
+        logger.debug('Challenges Map keys', { keys: Array.from(challenges.keys()) });
         
         const challengeData = challenges.get(challenge);
         if (!challengeData || challengeData.type !== 'registration') {
             // 尝试查找匹配的挑战（用于调试）
-            console.log('Challenge not found in map, searching for matches...');
+            logger.debug('Challenge not found in map, searching for matches');
             for (const [key, value] of challenges.entries()) {
-                console.log(`Stored challenge: "${key}", type: ${value.type}`);
+                logger.debug(`Stored challenge`, { key, type: value.type });
             }
             return res.status(400).json({ message: 'Invalid or expired challenge.' });
         }
@@ -116,8 +117,8 @@ router.post('/verify-registration', authMiddleware, async (req, res) => {
 
         // 验证注册响应
         // 使用存储的原始挑战进行验证
-        console.log('Using challenge for verification:', challenge);
-        console.log('Challenge type:', typeof challenge);
+        logger.debug('Using challenge for verification', { challenge });
+        logger.debug('Challenge type', { type: typeof challenge });
         
         const verification = await verifyPasskeyRegistration(
             response,
@@ -142,7 +143,7 @@ router.post('/verify-registration', authMiddleware, async (req, res) => {
             challenges.delete(challenge);
 
             if (DEBUG) {
-                console.log('Passkey registered successfully for user:', userId);
+                logger.success('Passkey registered successfully for user', { userId });
             }
 
             res.json({ 
@@ -156,7 +157,7 @@ router.post('/verify-registration', authMiddleware, async (req, res) => {
             });
         }
     } catch (error) {
-        console.error('Error verifying registration:', error);
+        logger.error('Error verifying registration', error);
         res.status(500).json({ message: 'Failed to verify registration.' });
     }
 });
@@ -201,7 +202,7 @@ router.post('/generate-authentication-options', async (req, res) => {
         }, 5 * 60 * 1000);
 
         if (DEBUG) {
-            console.log('Generated authentication options for user:', username);
+            logger.debug('Generated authentication options for user', { username });
         }
 
         res.json({
@@ -211,7 +212,7 @@ router.post('/generate-authentication-options', async (req, res) => {
             rpOrigin
         });
     } catch (error) {
-        console.error('Error generating authentication options:', error);
+        logger.error('Error generating authentication options', error);
         res.status(500).json({ message: 'Failed to generate authentication options.' });
     }
 });
@@ -231,12 +232,12 @@ router.post('/verify-authentication', async (req, res) => {
 
         // Debug: Log the response object structure
         if (DEBUG) {
-            console.log('Received authentication response object keys:', Object.keys(response));
-            console.log('Received challenge:', challenge);
-            console.log('Authentication response structure:', JSON.stringify(response, null, 2));
+            logger.debug('Received authentication response object keys', { keys: Object.keys(response) });
+            logger.debug('Received challenge', { challenge });
+            logger.debug('Authentication response structure', { structure: JSON.stringify(response, null, 2) });
         }
 
-        console.log('Extracted challenge from response:', challenge);
+        logger.debug('Extracted challenge from response', { challenge });
         const challengeData = challenges.get(challenge);
         if (!challengeData || challengeData.type !== 'authentication') {
             return res.status(400).json({ message: 'Invalid or expired challenge.' });
@@ -294,7 +295,7 @@ router.post('/verify-authentication', async (req, res) => {
             challenges.delete(challenge);
 
             if (DEBUG) {
-                console.log('Passkey authentication successful for user:', username);
+                logger.success('Passkey authentication successful for user', { username });
             }
 
             res.json({
@@ -317,7 +318,7 @@ router.post('/verify-authentication', async (req, res) => {
             });
         }
     } catch (error) {
-        console.error('Error verifying authentication:', error);
+        logger.error('Error verifying authentication', error);
         res.status(500).json({ message: 'Failed to verify authentication.' });
     }
 });
@@ -338,7 +339,7 @@ router.get('/list', authMiddleware, async (req, res) => {
             }))
         });
     } catch (error) {
-        console.error('Error listing passkeys:', error);
+        logger.error('Error listing passkeys', error);
         res.status(500).json({ message: 'Failed to list passkeys.' });
     }
 });
@@ -358,12 +359,12 @@ router.delete('/:passkeyId', authMiddleware, async (req, res) => {
         await Passkey.findByIdAndDelete(passkeyId);
         
         if (DEBUG) {
-            console.log('Passkey deleted for user:', userId);
+            logger.success('Passkey deleted for user', { userId });
         }
 
         res.json({ message: 'Passkey deleted successfully.' });
     } catch (error) {
-        console.error('Error deleting passkey:', error);
+        logger.error('Error deleting passkey', error);
         res.status(500).json({ message: 'Failed to delete passkey.' });
     }
 });
@@ -385,7 +386,7 @@ router.get('/check/:username', async (req, res) => {
             count: passkeyCount
         });
     } catch (error) {
-        console.error('Error checking passkeys:', error);
+        logger.error('Error checking passkeys', error);
         res.status(500).json({ message: 'Failed to check passkeys.' });
     }
 });

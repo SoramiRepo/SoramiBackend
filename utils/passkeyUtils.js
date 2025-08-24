@@ -5,6 +5,7 @@ import {
     verifyAuthenticationResponse
 } from '@simplewebauthn/server';
 import { isoBase64URL, isoUint8Array } from '@simplewebauthn/server/helpers';
+import logger from './logger.js';
 
 // 获取当前域名（用于RP ID）
 export const getRPID = () => {
@@ -66,7 +67,7 @@ export const verifyPasskeyRegistration = async (response, expectedChallenge, exp
 
         return verification;
     } catch (error) {
-        console.error('Passkey registration verification failed:', error);
+        logger.error('Passkey registration verification failed', error);
         throw error;
     }
 };
@@ -116,7 +117,7 @@ export const verifyPasskeyAuthentication = async (response, expectedChallenge, e
 
         return verification;
     } catch (error) {
-        console.error('Passkey authentication verification failed:', error);
+        logger.error('Passkey authentication verification failed', error);
         throw error;
     }
 };

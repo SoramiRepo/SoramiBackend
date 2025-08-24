@@ -1,5 +1,6 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import logger from './logger.js';
 import Message from '../models/Message.js';
 import ChatSession from '../models/ChatSession.js';
 import User from '../models/User.js';
@@ -42,7 +43,7 @@ class SocketServer {
 
     setupEventHandlers() {
         this.io.on('connection', (socket) => {
-            console.log(`User connected: ${socket.username} (${socket.userId})`);
+            logger.websocket(`User connected: ${socket.username}`, socket.userId);
             
             this.handleConnection(socket);
             
@@ -104,7 +105,7 @@ class SocketServer {
     handleDisconnection(socket) {
         const userId = socket.userId;
         
-        console.log(`User disconnected: ${socket.username} (${userId})`);
+        logger.websocket(`User disconnected: ${socket.username}`, userId);
         
         // 清理映射
         this.userSockets.delete(userId);

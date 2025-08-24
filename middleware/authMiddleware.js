@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import logger from '../utils/logger.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -16,7 +17,9 @@ const authMiddleware = (req, res, next) => {
             return res.status(401).json({ message: 'Invalid token format' });
         }
         
-        if (process.env.DEBUG) console.log('[DEBUG] authMiddleware -> Token:', token.substring(0, 20) + '...');
+        if (process.env.DEBUG === 'true') {
+            logger.debug(`Auth token received`, { tokenPreview: token.substring(0, 20) + '...' });
+        }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
@@ -46,7 +49,7 @@ const authMiddleware = (req, res, next) => {
         } else if (err.name === 'TokenExpiredError') {
             return res.status(401).json({ message: 'Token expired' });
         } else {
-            console.error('Token verification failed:', err.message);
+            logger.error('Token verification failed', err);
             return res.status(401).json({ message: 'Token verification failed' });
         }
     }
