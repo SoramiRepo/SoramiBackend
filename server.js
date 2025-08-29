@@ -18,9 +18,9 @@ import { initializeBucket } from './utils/ossClient.js';
 import userRoutes from './routes/user.js';
 import postRoutes from './routes/post.js';
 import notificationRoutes from './routes/notification.js';
-import messageRoutes from './routes/message.js';
 import passkeyRoutes from './routes/passkey.js';
 import uploadRoutes from './routes/upload.js';
+import messageRoutes from './routes/message.js';
 import SocketServer from './utils/socketServer.js';
 
 const app = express();
@@ -149,9 +149,9 @@ initializeBucket().catch((error) => {
 app.use('/api/user', userRoutes);
 app.use('/api/post', postRoutes);
 app.use('/api/notification', notificationRoutes);
-app.use('/api/message', messageRoutes);
 app.use('/api/passkey', passkeyRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/message', messageRoutes);
 
 // Health check routes
 app.use('/health', healthRoutes);
@@ -177,11 +177,8 @@ const server = app.listen(PORT, () => {
 });
 
 // Initialize WebSocket server
-let socketServer;
-try {
-    socketServer = new SocketServer(server);
-    logger.websocket('WebSocket server initialized');
-} catch (error) {
-    logger.error('WebSocket server initialization failed', error);
-    // Don't exit here, just log the error
-}
+const socketServer = new SocketServer(server);
+logger.info('WebSocket server initialized');
+
+// Make socket server available globally for controllers
+global.socketServer = socketServer;

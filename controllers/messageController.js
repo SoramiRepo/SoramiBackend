@@ -1,318 +1,606 @@
 import Message from '../models/Message.js';
 import ChatSession from '../models/ChatSession.js';
+import Group from '../models/Group.js';
 import User from '../models/User.js';
+import { validateObjectId } from '../utils/validation.js';
 import logger from '../utils/logger.js';
 
-// 发送消息
-export const sendMessage = async (req, res) => {
+class MessageController {
+  // 发送私信
+  async sendPrivateMessage(req, res) {
     try {
-        const { receiverId, content, messageType = 'text' } = req.body;
-        const senderId = req.user.userId;
+      const { receiverId, content, type = 'text', fileUrl, fileName, fileSize } = req.body;
+      const senderId = req.user.id;
 
-        // 验证输入参数
-        if (!content || typeof content !== 'string' || content.trim().length === 0) {
-            return res.status(400).json({ message: 'Valid message content is required' });
-        }
-        
-        if (content.length > 1000) {
-            return res.status(400).json({ message: 'Message content too long (max 1000 characters)' });
-        }
-        
-        if (!receiverId || typeof receiverId !== 'string') {
-            return res.status(400).json({ message: 'Valid receiver ID is required' });
-        }
-        
-        if (!['text', 'image', 'file'].includes(messageType)) {
-            return res.status(400).json({ message: 'Invalid message type' });
-        }
-
-        // 验证接收者是否存在
-        const receiver = await User.findById(receiverId);
-        if (!receiver) {
-            return res.status(404).json({ message: 'Receiver not found' });
-        }
-
-        // 不能给自己发消息
-        if (senderId === receiverId) {
-            return res.status(400).json({ message: 'Cannot send message to yourself' });
-        }
-
-        // 创建或获取聊天会话
-        const session = await ChatSession.findOrCreateSession(senderId, receiverId);
-
-        // 创建消息
-        const message = new Message({
-            sender: senderId,
-            receiver: receiverId,
-            content,
-            messageType
+      // 验证参数
+      if (!receiverId || !content) {
+        return res.status(400).json({
+          success: false,
+          message: 'Receiver ID and content are required'
         });
+      }
 
-        await message.save();
-
-        // 更新会话信息
-        session.lastMessage = message._id;
-        session.lastMessageAt = new Date();
-        await session.incrementUnreadCount(receiverId);
-        await session.save();
-
-        // 填充发送者信息
-        await message.populate('sender', 'username avatarname avatarimg');
-
-        res.status(201).json({
-            message: 'Message sent successfully',
-            data: message
+      if (!validateObjectId(receiverId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid receiver ID'
         });
+      }
+
+      // 检查接收者是否存在
+      const receiver = await User.findById(receiverId);
+      if (!receiver) {
+        return res.status(404).json({
+          success: false,
+          message: 'Receiver not found'
+        });
+      }
+
+      // 不能给自己发消息
+      if (senderId === receiverId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot send message to yourself'
+        });
+      }
+
+      // 创建或获取聊天会话
+      const chatSession = await ChatSession.createPrivateSession(senderId, receiverId);
+
+      // 创建消息
+      const message = await Message.createPrivateMessage({
+        senderId,
+        receiverId,
+        content,
+        type,
+        fileUrl,
+        fileName,
+        fileSize
+      });
+
+      // 更新聊天会话的最后消息
+      await chatSession.updateLastMessage(message);
+
+      // 增加接收者的未读计数
+      await chatSession.incrementUnreadCount(receiverId);
+
+      // 返回消息
+      const populatedMessage = await Message.findById(message._id)
+        .populate('senderId', 'username avatarUrl')
+        .populate('receiverId', 'username avatarUrl');
+
+      res.status(201).json({
+        success: true,
+        message: 'Message sent successfully',
+        data: populatedMessage
+      });
+
+      // 通过WebSocket发送实时消息
+      if (global.socketServer) {
+        await global.socketServer.sendNewMessage(message, chatSession.chatId);
+      }
 
     } catch (error) {
-        logger.error('Send message error', error);
-        res.status(500).json({ message: 'Failed to send message' });
+      logger.error('Error sending private message:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
     }
-};
+  }
 
-// 获取与特定用户的聊天记录
-export const getChatHistory = async (req, res) => {
+  // 发送群组消息
+  async sendGroupMessage(req, res) {
     try {
-        const { targetUserId } = req.params;
-        const currentUserId = req.user.userId;
-        const { page = 1, limit = 50 } = req.query;
-        
-        // 验证分页参数
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
-        
-        if (isNaN(pageNum) || pageNum < 1) {
-            return res.status(400).json({ message: 'Invalid page number' });
-        }
-        
-        if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
-            return res.status(400).json({ message: 'Invalid limit (must be between 1 and 100)' });
-        }
+      const { groupId, content, type = 'text', fileUrl, fileName, fileSize } = req.body;
+      const senderId = req.user.id;
 
-        // 验证目标用户是否存在
-        const targetUser = await User.findById(targetUserId);
-        if (!targetUser) {
-            return res.status(404).json({ message: 'Target user not found' });
-        }
-
-        // 查找聊天会话
-        const session = await ChatSession.findOne({
-            participants: { $all: [currentUserId, targetUserId] }
+      // 验证参数
+      if (!groupId || !content) {
+        return res.status(400).json({
+          success: false,
+          message: 'Group ID and content are required'
         });
+      }
 
-        if (!session) {
-            return res.json({
-                messages: [],
-                session: null,
-                pagination: { page: 1, limit, total: 0, pages: 0 }
-            });
-        }
+      if (!validateObjectId(groupId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid group ID'
+        });
+      }
 
-        // 获取消息
-        const skip = (pageNum - 1) * limitNum;
-        const messages = await Message.find({
-            $or: [
-                { sender: currentUserId, receiver: targetUserId },
-                { sender: targetUserId, receiver: currentUserId }
-            ],
-            deletedFor: { $ne: currentUserId }
-        })
+      // 检查群组是否存在
+      const group = await Group.findById(groupId);
+      if (!group) {
+        return res.status(404).json({
+          success: false,
+          message: 'Group not found'
+        });
+      }
+
+      // 检查用户是否是群组成员
+      const isMember = group.members.some(member => 
+        member.userId.equals(senderId) && member.isActive
+      );
+
+      if (!isMember) {
+        return res.status(403).json({
+          success: false,
+          message: 'You are not a member of this group'
+        });
+      }
+
+      // 检查用户是否有发送消息的权限
+      if (!group.hasPermission(senderId, 'send_message')) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have permission to send messages in this group'
+        });
+      }
+
+      // 创建或获取聊天会话
+      let chatSession = await ChatSession.findOne({ chatId: `group_${groupId}` });
+      
+      if (!chatSession) {
+        chatSession = await ChatSession.createGroupSession(group);
+      }
+
+      // 创建消息
+      const message = await Message.createGroupMessage({
+        groupId,
+        senderId,
+        content,
+        type,
+        fileUrl,
+        fileName,
+        fileSize
+      });
+
+      // 更新聊天会话的最后消息
+      await chatSession.updateLastMessage(message);
+
+      // 增加所有成员的未读计数（除了发送者）
+      const otherMembers = group.members.filter(member => 
+        !member.userId.equals(senderId) && member.isActive
+      );
+
+      for (const member of otherMembers) {
+        await chatSession.incrementUnreadCount(member.userId);
+      }
+
+      // 增加群组消息计数
+      await group.incrementMessageCount();
+
+      // 返回消息
+      const populatedMessage = await Message.findById(message._id)
+        .populate('senderId', 'username avatarUrl')
+        .populate('groupId', 'name avatarUrl');
+
+      res.status(201).json({
+        success: true,
+        message: 'Group message sent successfully',
+        data: populatedMessage
+      });
+
+      // 通过WebSocket发送实时消息
+      if (global.socketServer) {
+        await global.socketServer.sendNewMessage(message, chatSession.chatId);
+      }
+
+    } catch (error) {
+      logger.error('Error sending group message:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+  // 获取聊天历史
+  async getChatHistory(req, res) {
+    try {
+      const { chatId } = req.params;
+      const { page = 1, limit = 50 } = req.query;
+      const userId = req.user.id;
+
+      // 验证参数
+      if (!chatId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Chat ID is required'
+        });
+      }
+
+      // 检查用户是否有权限访问这个聊天
+      const chatSession = await ChatSession.findOne({ chatId });
+      if (!chatSession) {
+        return res.status(404).json({
+          success: false,
+          message: 'Chat not found'
+        });
+      }
+
+      const isParticipant = chatSession.participants.some(p => p.userId.equals(userId));
+      if (!isParticipant) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have access to this chat'
+        });
+      }
+
+      // 计算分页
+      const skip = (page - 1) * limit;
+
+      // 获取消息
+      const messages = await Message.find({ chatId })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
-        .populate('sender', 'username avatarname avatarimg')
-        .populate('receiver', 'username avatarname avatarimg');
+        .populate('senderId', 'username avatarUrl')
+        .populate('receiverId', 'username avatarUrl')
+        .populate('groupId', 'name avatarUrl');
 
-        // 获取总数
-        const total = await Message.countDocuments({
-            $or: [
-                { sender: currentUserId, receiver: targetUserId },
-                { sender: targetUserId, receiver: currentUserId }
-            ],
-            deletedFor: { $ne: currentUserId }
-        });
+      // 获取总数
+      const total = await Message.countDocuments({ chatId });
 
-        // 标记消息为已读
-        await Message.updateMany(
-            {
-                sender: targetUserId,
-                receiver: currentUserId,
-                isRead: false
-            },
-            {
-                isRead: true,
-                readAt: new Date()
-            }
-        );
+      // 清除未读计数
+      await chatSession.clearUnreadCount(userId);
 
-        // 重置未读消息数
-        if (session) {
-            await session.resetUnreadCount(currentUserId);
+      res.json({
+        success: true,
+        message: 'Chat history retrieved successfully',
+        data: messages.reverse(), // 按时间正序返回
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit)
         }
-
-        res.json({
-            messages: messages.reverse(), // 按时间正序返回
-            session,
-            pagination: {
-                page: pageNum,
-                limit: limitNum,
-                total,
-                pages: Math.ceil(total / limitNum)
-            }
-        });
+      });
 
     } catch (error) {
-        logger.error('Get chat history error', error);
-        res.status(500).json({ message: 'Failed to get chat history' });
+      logger.error('Error getting chat history:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
     }
-};
+  }
 
-// 获取用户的聊天会话列表
-export const getChatSessions = async (req, res) => {
+  // 获取聊天会话列表
+  async getChatSessions(req, res) {
     try {
-        const currentUserId = req.user.userId;
-        const { page = 1, limit = 20 } = req.query;
-        
-        // 验证分页参数
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
-        
-        if (isNaN(pageNum) || pageNum < 1) {
-            return res.status(400).json({ message: 'Invalid page number' });
-        }
-        
-        if (isNaN(limitNum) || limitNum < 1 || limitNum > 50) {
-            return res.status(400).json({ message: 'Invalid limit (must be between 1 and 50)' });
-        }
+      const userId = req.user.id;
+      const { page = 1, limit = 20 } = req.query;
 
-        const skip = (pageNum - 1) * limitNum;
+      // 计算分页
+      const skip = (page - 1) * limit;
 
-        // 查找用户的聊天会话
-        const sessions = await ChatSession.find({
-            participants: currentUserId,
-            isActive: true
-        })
-        .populate('participants', 'username avatarname avatarimg')
-        .populate('lastMessage')
-        .sort({ lastMessageAt: -1 })
+      // 获取用户的聊天会话
+      const chatSessions = await ChatSession.find({
+        'participants.userId': userId
+      })
+        .sort({ lastActivity: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(parseInt(limit))
+        .populate('participants.userId', 'username avatarUrl isOnline lastSeen')
+        .populate('lastMessage.senderId', 'username avatarUrl')
+        .populate('groupInfo.creator', 'username avatarUrl')
+        .populate('groupInfo.admins', 'username avatarUrl');
 
-        // 获取总数
-        const total = await ChatSession.countDocuments({
-            participants: currentUserId,
-            isActive: true
-        });
+      // 获取总数
+      const total = await ChatSession.countDocuments({
+        'participants.userId': userId
+      });
 
-        // 处理会话数据，隐藏当前用户信息
-        const processedSessions = sessions.map(session => {
-            const otherParticipant = session.participants.find(
-                p => p._id.toString() !== currentUserId.toString()
-            );
-            
-            return {
-                _id: session._id,
-                otherUser: otherParticipant,
-                lastMessage: session.lastMessage,
-                lastMessageAt: session.lastMessageAt,
-                unreadCount: session.getUnreadCount(currentUserId),
-                userSettings: session.userSettings.get(currentUserId.toString()),
-                createdAt: session.createdAt
-            };
-        });
+      // 格式化返回数据
+      const formattedSessions = chatSessions.map(session => {
+        const otherParticipant = session.participants.find(p => !p.userId.equals(userId));
+        const unreadCount = session.unreadCounts.find(u => u.userId.equals(userId))?.count || 0;
 
-        res.json({
-            sessions: processedSessions,
-            pagination: {
-                page: pageNum,
-                limit: limitNum,
-                total,
-                pages: Math.ceil(total / limitNum)
-            }
-        });
+        if (session.type === 'private') {
+          return {
+            id: session.chatId,
+            type: 'private',
+            name: otherParticipant?.userId?.username || 'Unknown User',
+            avatar_url: otherParticipant?.userId?.avatarUrl,
+            participants: session.participants.map(p => ({
+              id: p.userId._id,
+              username: p.userId.username,
+              avatar_url: p.userId.avatarUrl,
+              is_online: p.userId.isOnline,
+              last_seen: p.userId.lastSeen
+            })),
+            last_message: session.lastMessage,
+            last_activity: session.lastActivity,
+            unread_count: unreadCount,
+            is_pinned: session.isPinned,
+            is_muted: session.isMuted
+          };
+        } else {
+          return {
+            id: session.chatId,
+            type: 'group',
+            name: session.name,
+            avatar_url: session.avatarUrl,
+            description: session.description,
+            participants: session.participants.map(p => ({
+              id: p.userId._id,
+              username: p.userId.username,
+              avatar_url: p.userId.avatarUrl,
+              role: p.role
+            })),
+            group_info: {
+              creator: session.groupInfo?.creator,
+              admins: session.groupInfo?.admins || []
+            },
+            last_message: session.lastMessage,
+            last_activity: session.lastActivity,
+            unread_count: unreadCount,
+            is_pinned: session.isPinned,
+            is_muted: session.isMuted
+          };
+        }
+      });
+
+      res.json({
+        success: true,
+        message: 'Chat sessions retrieved successfully',
+        data: formattedSessions,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      });
 
     } catch (error) {
-        logger.error('Get chat sessions error', error);
-        res.status(500).json({ message: 'Failed to get chat sessions' });
+      logger.error('Error getting chat sessions:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
     }
-};
+  }
 
-// 删除消息
-export const deleteMessage = async (req, res) => {
+  // 标记消息为已读
+  async markMessageAsRead(req, res) {
     try {
-        const { messageId } = req.params;
-        const currentUserId = req.user.userId;
+      const { messageId } = req.params;
+      const userId = req.user.id;
 
-        const message = await Message.findById(messageId);
-        if (!message) {
-            return res.status(404).json({ message: 'Message not found' });
-        }
-
-        // 只能删除自己发送的消息
-        if (message.sender.toString() !== currentUserId.toString()) {
-            return res.status(403).json({ message: 'Cannot delete message from others' });
-        }
-
-        // 软删除：添加到deletedFor数组
-        if (!message.deletedFor.includes(currentUserId)) {
-            message.deletedFor.push(currentUserId);
-            await message.save();
-        }
-
-        res.json({ message: 'Message deleted successfully' });
-
-    } catch (error) {
-        logger.error('Delete message error', error);
-        res.status(500).json({ message: 'Failed to delete message' });
-    }
-};
-
-// 标记消息为已读
-export const markMessageAsRead = async (req, res) => {
-    try {
-        const { messageId } = req.params;
-        const currentUserId = req.user.userId;
-
-        const message = await Message.findById(messageId);
-        if (!message) {
-            return res.status(404).json({ message: 'Message not found' });
-        }
-
-        // 只能标记发给自己的消息为已读
-        if (message.receiver.toString() !== currentUserId.toString()) {
-            return res.status(403).json({ message: 'Cannot mark others message as read' });
-        }
-
-        message.isRead = true;
-        message.readAt = new Date();
-        await message.save();
-
-        res.json({ message: 'Message marked as read' });
-
-    } catch (error) {
-        logger.error('Mark message as read error', error);
-        res.status(500).json({ message: 'Failed to mark message as read' });
-    }
-};
-
-// 获取未读消息数
-export const getUnreadCount = async (req, res) => {
-    try {
-        const currentUserId = req.user.userId;
-
-        const sessions = await ChatSession.find({
-            participants: currentUserId,
-            isActive: true
+      // 验证参数
+      if (!messageId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Message ID is required'
         });
+      }
 
-        const totalUnread = sessions.reduce((total, session) => {
-            return total + session.getUnreadCount(currentUserId);
-        }, 0);
+      if (!validateObjectId(messageId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid message ID'
+        });
+      }
 
-        res.json({ unreadCount: totalUnread });
+      // 查找消息
+      const message = await Message.findById(messageId);
+      if (!message) {
+        return res.status(404).json({
+          success: false,
+          message: 'Message not found'
+        });
+      }
+
+      // 检查用户是否有权限标记这条消息
+      const chatSession = await ChatSession.findOne({ chatId: message.chatId });
+      if (!chatSession) {
+        return res.status(404).json({
+          success: false,
+          message: 'Chat session not found'
+        });
+      }
+
+      const isParticipant = chatSession.participants.some(p => p.userId.equals(userId));
+      if (!isParticipant) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have access to this message'
+        });
+      }
+
+      // 标记为已读
+      await message.markAsRead(userId);
+
+      // 清除聊天会话的未读计数
+      await chatSession.clearUnreadCount(userId);
+
+      res.json({
+        success: true,
+        message: 'Message marked as read successfully'
+      });
 
     } catch (error) {
-        logger.error('Get unread count error', error);
-        res.status(500).json({ message: 'Failed to get unread count' });
+      logger.error('Error marking message as read:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
     }
-};
+  }
+
+  // 删除消息
+  async deleteMessage(req, res) {
+    try {
+      const { messageId } = req.params;
+      const userId = req.user.id;
+
+      // 验证参数
+      if (!messageId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Message ID is required'
+        });
+      }
+
+      if (!validateObjectId(messageId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid message ID'
+        });
+      }
+
+      // 查找消息
+      const message = await Message.findById(messageId);
+      if (!message) {
+        return res.status(404).json({
+          success: false,
+          message: 'Message not found'
+        });
+      }
+
+      // 检查用户是否有权限删除这条消息
+      if (!message.senderId.equals(userId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only delete your own messages'
+        });
+      }
+
+      // 软删除消息
+      message.isDeleted = true;
+      message.deletedAt = new Date();
+      await message.save();
+
+      res.json({
+        success: true,
+        message: 'Message deleted successfully'
+      });
+
+    } catch (error) {
+      logger.error('Error deleting message:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+  // 获取未读消息计数
+  async getUnreadCount(req, res) {
+    try {
+      const userId = req.user.id;
+
+      // 获取所有聊天会话的未读计数
+      const chatSessions = await ChatSession.find({
+        'participants.userId': userId
+      });
+
+      const unreadCounts = {};
+      let totalUnread = 0;
+
+      for (const session of chatSessions) {
+        const unreadCount = session.unreadCounts.find(u => u.userId.equals(userId))?.count || 0;
+        unreadCounts[session.chatId] = unreadCount;
+        totalUnread += unreadCount;
+      }
+
+      res.json({
+        success: true,
+        message: 'Unread count retrieved successfully',
+        data: {
+          total: totalUnread,
+          byChat: unreadCounts
+        }
+      });
+
+    } catch (error) {
+      logger.error('Error getting unread count:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+
+  // 搜索消息
+  async searchMessages(req, res) {
+    try {
+      const { chatId } = req.params;
+      const { q: query, page = 1, limit = 20 } = req.query;
+      const userId = req.user.id;
+
+      // 验证参数
+      if (!chatId || !query) {
+        return res.status(400).json({
+          success: false,
+          message: 'Chat ID and search query are required'
+        });
+      }
+
+      // 检查用户是否有权限搜索这个聊天
+      const chatSession = await ChatSession.findOne({ chatId });
+      if (!chatSession) {
+        return res.status(404).json({
+          success: false,
+          message: 'Chat not found'
+        });
+      }
+
+      const isParticipant = chatSession.participants.some(p => p.userId.equals(userId));
+      if (!isParticipant) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have access to this chat'
+        });
+      }
+
+      // 计算分页
+      const skip = (page - 1) * limit;
+
+      // 搜索消息
+      const messages = await Message.find({
+        chatId,
+        content: { $regex: query, $options: 'i' },
+        isDeleted: { $ne: true }
+      })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate('senderId', 'username avatarUrl')
+        .populate('receiverId', 'username avatarUrl')
+        .populate('groupId', 'name avatarUrl');
+
+      // 获取总数
+      const total = await Message.countDocuments({
+        chatId,
+        content: { $regex: query, $options: 'i' },
+        isDeleted: { $ne: true }
+      });
+
+      res.json({
+        success: true,
+        message: 'Messages searched successfully',
+        data: messages,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      });
+
+    } catch (error) {
+      logger.error('Error searching messages:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+      });
+    }
+  }
+}
+
+export default new MessageController();

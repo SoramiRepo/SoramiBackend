@@ -232,7 +232,7 @@ router.put('/edit-profile', authMiddleware, async (req, res) => {
 });
 
 router.post('/follow/:targetId', authMiddleware, async (req, res) => {
-    const { userId } = req;
+    const { userId } = req.user;
     const { targetId } = req.params;
 
     if (userId === targetId) {
@@ -275,8 +275,8 @@ router.post('/follow/:targetId', authMiddleware, async (req, res) => {
     }
 });
 
-router.post('/unfollow/:targetId', authMiddleware, async (req, res) => {
-    const { userId } = req;
+router.delete('/unfollow/:targetId', authMiddleware, async (req, res) => {
+    const { userId } = req.user;
     const { targetId } = req.params;
 
     if (userId === targetId) {

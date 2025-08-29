@@ -1,40 +1,31 @@
 import express from 'express';
-import {
-    sendMessage,
-    getChatHistory,
-    getChatSessions,
-    deleteMessage,
-    markMessageAsRead,
-    getUnreadCount
-} from '../controllers/messageController.js';
+const router = express.Router();
+import messageController from '../controllers/messageController.js';
+import * as groupController from '../controllers/groupController.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 
-const router = express.Router();
-
-// 所有路由都需要认证
+// Apply authentication middleware to all routes
 router.use(authMiddleware);
 
-// 测试路由
-router.get('/test', (req, res) => {
-            res.json({ message: 'Message route is working', userId: req.user.userId });
-});
+// Message routes
+router.post('/private', messageController.sendPrivateMessage);
+router.post('/group', messageController.sendGroupMessage);
+router.get('/chat/:chatId/history', messageController.getChatHistory);
+router.get('/sessions', messageController.getChatSessions);
+router.put('/:messageId/read', messageController.markMessageAsRead);
+router.delete('/:messageId', messageController.deleteMessage);
+router.get('/unread', messageController.getUnreadCount);
+router.get('/search', messageController.searchMessages);
 
-// 发送消息
-router.post('/send', sendMessage);
-
-// 获取与特定用户的聊天记录
-router.get('/chat/:targetUserId', getChatHistory);
-
-// 获取用户的聊天会话列表
-router.get('/sessions', getChatSessions);
-
-// 删除消息
-router.delete('/:messageId', deleteMessage);
-
-// 标记消息为已读
-router.put('/:messageId/read', markMessageAsRead);
-
-// 获取未读消息数
-router.get('/unread/count', getUnreadCount);
+// Group routes
+router.post('/groups', groupController.createGroup);
+router.get('/groups', groupController.getGroups);
+router.get('/groups/:groupId', groupController.getGroupDetails);
+router.put('/groups/:groupId', groupController.updateGroup);
+router.post('/groups/:groupId/join', groupController.joinGroup);
+router.post('/groups/:groupId/leave', groupController.leaveGroup);
+router.post('/groups/:groupId/members', groupController.addGroupMember);
+router.delete('/groups/:groupId/members/:userId', groupController.removeGroupMember);
+router.get('/groups/search', groupController.searchGroups);
 
 export default router;
